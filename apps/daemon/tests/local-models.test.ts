@@ -2,11 +2,16 @@ import { mkdir, stat, writeFile } from 'node:fs/promises';
 import { mkdtempSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import Database from 'better-sqlite3';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   computeRollingScorecard,
+  listLocalModels,
   localModelIdForPath,
+  migrateLocalModels,
   scanLocalModels,
+  setLocalModelEnabled,
+  upsertLocalModels,
 } from '../src/local-models.js';
 
 const tempDirs: string[] = [];
@@ -76,5 +81,36 @@ describe('local model scanner', () => {
       updatedAt: 1779757200000,
     });
     expect(card.overallSuccess).toBeGreaterThan(0);
+  });
+});
+
+describe('local model persistence', () => {
+  afterEach(() => {
+    for (const dir of tempDirs.splice(0)) {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('persists scanned models and preserves manual enabled state on rescan', async () => {
+    const db = new Database(':memory:');
+    migrateLocalModels(db);
+
+    const root = makeTempDir();
+    const ggufDir = path.join(root, 'GGUF');
+    await mkdir(ggufDir, { recursive: true });
+    await writeFile(path.join(ggufDir, 'Llama-3.2-1B-Instruct-Q4_K_M.gguf'), 'model-bytes');
+
+    const firstScan = await scanLocalModels(root, { now: 1779757200000 });
+    upsertLocalModels(db, firstScan);
+    expect(listLocalModels(db)).toHaveLength(1);
+
+    const disabled = setLocalModelEnabled(db, firstScan[0].id, false);
+    expect(disabled?.enabled).toBe(false);
+
+    const secondScan = await scanLocalModels(root, { now: 1779757300000 });
+    upsertLocalModels(db, secondScan);
+
+    expect(listLocalModels(db)[0].enabled).toBe(false);
+    db.close();
   });
 });

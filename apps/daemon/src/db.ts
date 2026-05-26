@@ -9,6 +9,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { migrateCritique } from './critique/persistence.js';
+import { migrateLocalModels } from './local-models.js';
 import { migrateMediaTasks } from './media-tasks.js';
 import { migratePlugins } from './plugins/persistence.js';
 
@@ -278,6 +279,7 @@ function migrate(db: SqliteDb): void {
   }
   migrateCritique(db);
   migrateMediaTasks(db);
+  migrateLocalModels(db);
   migratePlugins(db);
 }
 

@@ -101,16 +101,21 @@ describe('local model persistence', () => {
     await writeFile(path.join(ggufDir, 'Llama-3.2-1B-Instruct-Q4_K_M.gguf'), 'model-bytes');
 
     const firstScan = await scanLocalModels(root, { now: 1779757200000 });
+    expect(firstScan).toHaveLength(1);
+    const firstModel = firstScan[0];
+    if (!firstModel) throw new Error('expected scan to return one local model');
     upsertLocalModels(db, firstScan);
     expect(listLocalModels(db)).toHaveLength(1);
 
-    const disabled = setLocalModelEnabled(db, firstScan[0].id, false);
+    const disabled = setLocalModelEnabled(db, firstModel.id, false);
     expect(disabled?.enabled).toBe(false);
 
     const secondScan = await scanLocalModels(root, { now: 1779757300000 });
     upsertLocalModels(db, secondScan);
 
-    expect(listLocalModels(db)[0].enabled).toBe(false);
+    const persisted = listLocalModels(db);
+    expect(persisted).toHaveLength(1);
+    expect(persisted[0]?.enabled).toBe(false);
     db.close();
   });
 });

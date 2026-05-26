@@ -172,6 +172,8 @@ const MEMORY_STRING_FLAGS = new Set([
 const MEMORY_BOOLEAN_FLAGS = new Set([
   'help', 'h', 'json',
 ]);
+const MODEL_STRING_FLAGS = new Set(['daemon-url', 'root', 'task']);
+const MODEL_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 // Hoisted because `runAutomation` is reachable through the top-of-file
 // SUBCOMMAND_MAP dispatch, which runs during module evaluation —
 // any `const` declared further down would still be in TDZ when
@@ -193,6 +195,8 @@ const RECOVERABLE_EXIT_CODES = {
   'plugin-requires-daemon':   71,
   'snapshot-stale':           72,
   'genui-surface-awaiting':   73,
+  LOCAL_MODEL_SCAN_FAILED:    74,
+  LOCAL_MODEL_NOT_FOUND:      75,
 };
 const PLUGIN_LIST_FILTER_FLAGS = new Set([
   ...PLUGIN_STRING_FLAGS,
@@ -215,6 +219,7 @@ const SUBCOMMAND_MAP = {
   automation: runAutomation,
   automations: runAutomation,
   memory: runMemory,
+  model: runModel,
   run: runRun,
   files: runFiles,
   conversation: runConversation,
@@ -321,6 +326,9 @@ function printRootHelp() {
 
   od memory tree <list|view|edit|move> [args]
       Inspect and edit the memory tree that is injected into agent prompts.
+
+  od model <scan|list|scorecard|enable|disable> [args]
+      Scan, inspect, and manage the local model pool.
 
   od ui <list|show|respond|revoke|prefill> [args]
       Read and answer GenUI surfaces (form / choice / confirmation / oauth-prompt) headlessly.
@@ -4119,6 +4127,160 @@ function printUiHelp() {
 Common options:
   --daemon-url <url>   Open Design daemon HTTP base (default OD_DAEMON_URL, OD_SIDECAR_IPC_PATH discovery, or http://127.0.0.1:7456).
   --json               Emit raw JSON (suitable for scripts) instead of human-readable output.`);
+}
+
+// ---------------------------------------------------------------------------
+// Subcommand: od model …  (local model pool)
+// ---------------------------------------------------------------------------
+
+async function runModel(args) {
+  if (args.length === 0) {
+    process.stderr.write(modelHelpText().replace(/^Usage:/, 'usage:') + '\n');
+    process.exit(1);
+  }
+  if (args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
+    process.stdout.write(modelHelpText() + '\n');
+    return;
+  }
+
+  const sub = args[0];
+  const rest = args.slice(1);
+  let flags;
+  try {
+    flags = parseFlags(rest, { string: MODEL_STRING_FLAGS, boolean: MODEL_BOOLEAN_FLAGS });
+  } catch (err) {
+    console.error(err.message);
+    console.error(modelHelpText());
+    process.exit(2);
+  }
+  const base = (await cliDaemonUrl(flags)).replace(/\/$/, '');
+  const positional = rest.filter((a) => !a.startsWith('-')
+    && a !== flags['daemon-url']
+    && a !== flags.root
+    && a !== flags.task);
+
+  switch (sub) {
+    case 'scan': {
+      const body = flags.root ? { root: flags.root } : {};
+      const resp = await modelFetch(base, `${base}/api/local-models/scan`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!resp.ok) return structuredHttpFailure(resp);
+      const data = await resp.json();
+      return printModelOutput(data, flags, () => {
+        const models = Array.isArray(data?.models) ? data.models : [];
+        console.log(`Scanned ${models.length} local model(s).`);
+        for (const model of models) {
+          console.log(formatLocalModelLine(model));
+        }
+      });
+    }
+    case 'list': {
+      const resp = await modelFetch(base, `${base}/api/local-models`);
+      if (!resp.ok) return structuredHttpFailure(resp);
+      const data = await resp.json();
+      return printModelOutput(data, flags, () => {
+        const models = Array.isArray(data?.models) ? data.models : [];
+        if (models.length === 0) {
+          console.log('No local models found. Run `od model scan --root <path>`.');
+          return;
+        }
+        for (const model of models) {
+          console.log(formatLocalModelLine(model));
+        }
+      });
+    }
+    case 'scorecard': {
+      const resp = await modelFetch(base, `${base}/api/local-models/scorecards`);
+      if (!resp.ok) return structuredHttpFailure(resp);
+      const data = await resp.json();
+      const scorecards = Array.isArray(data?.scorecards) ? data.scorecards : [];
+      const filtered = flags.task
+        ? scorecards.filter((scorecard) => scorecard?.task === flags.task)
+        : scorecards;
+      const output = { ...data, scorecards: filtered };
+      return printModelOutput(output, flags, () => {
+        if (filtered.length === 0) {
+          console.log('No local model scorecards found.');
+          return;
+        }
+        for (const scorecard of filtered) {
+          console.log(formatLocalModelScorecardLine(scorecard));
+        }
+      });
+    }
+    case 'enable':
+    case 'disable': {
+      const id = positional[0];
+      if (!id) {
+        console.error(`Usage: od model ${sub} <model-id> [--json] [--daemon-url <url>]`);
+        process.exit(2);
+      }
+      const resp = await modelFetch(base, `${base}/api/local-models/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: sub === 'enable' }),
+      });
+      if (!resp.ok) return structuredHttpFailure(resp);
+      const data = await resp.json();
+      return printModelOutput(data, flags, () => {
+        const model = data?.model;
+        console.log(`${model?.id ?? id} ${sub === 'enable' ? 'enabled' : 'disabled'}.`);
+      });
+    }
+    default:
+      console.error(`unknown subcommand: od model ${sub}`);
+      console.error(modelHelpText());
+      process.exit(2);
+  }
+}
+
+async function modelFetch(base, url, init) {
+  try {
+    return await fetch(url, init);
+  } catch (err) {
+    surfaceFetchError(err, base);
+    process.exit(3);
+  }
+}
+
+function modelHelpText() {
+  return `Usage: od model <command> [options]
+
+Commands:
+  od model scan [--root <path>] [--json] [--daemon-url <url>]
+  od model list [--json] [--daemon-url <url>]
+  od model scorecard [--task <task>] [--json] [--daemon-url <url>]
+  od model enable <model-id> [--json] [--daemon-url <url>]
+  od model disable <model-id> [--json] [--daemon-url <url>]`;
+}
+
+function printModelOutput(data, flags, printHuman) {
+  if (flags.json) {
+    process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+    return;
+  }
+  printHuman();
+}
+
+function formatLocalModelLine(model) {
+  const enabled = model?.enabled === false ? 'disabled' : 'enabled';
+  const name = model?.name ?? model?.fileName ?? '-';
+  const roles = Array.isArray(model?.roles) && model.roles.length > 0 ? model.roles.join(',') : '-';
+  return `${model?.id ?? '-'}\t${enabled}\t${name}\troles=${roles}`;
+}
+
+function formatLocalModelScorecardLine(scorecard) {
+  const pct = (value) => typeof value === 'number' ? `${Math.round(value * 100)}%` : '-';
+  return [
+    scorecard?.modelId ?? '-',
+    scorecard?.task ?? '-',
+    `attempts=${scorecard?.attempts ?? 0}`,
+    `overall=${pct(scorecard?.overallSuccess)}`,
+    `completion=${pct(scorecard?.completionSuccess)}`,
+  ].join('\t');
 }
 
 function printPluginHelp() {

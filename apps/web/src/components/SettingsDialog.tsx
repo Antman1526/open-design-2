@@ -90,6 +90,7 @@ import { SkillsSection } from './SkillsSection';
 import { DesignSystemsSection } from './DesignSystemsSection';
 import { PrivacySection } from './PrivacySection';
 import { RoutinesSection } from './RoutinesSection';
+import { LocalModelsSection } from './LocalModelsSection';
 import { ConnectorsBrowser } from './ConnectorsBrowser';
 import { MemoryModelInline } from './MemoryModelInline';
 import { MemorySection } from './MemorySection';
@@ -117,6 +118,7 @@ import {
 export type SettingsSection =
   | 'execution'
   | 'instructions'
+  | 'local-models'
   | 'media'
   | 'composio'
   | 'orbit'
@@ -1911,6 +1913,10 @@ export function SettingsDialog({
       title: 'Instructions / Rules',
       subtitle: 'Fixed behavior the assistant should follow',
     },
+    'local-models': {
+      title: 'Local Models',
+      subtitle: 'Scan local GGUF models and review scorecards.',
+    },
     media: { title: t('settings.mediaProviders'), subtitle: t('settings.mediaProvidersHint') },
     composio: { title: t('connectors.title'), subtitle: t('connectors.subtitle') },
     orbit: { title: t('settings.orbit.title'), subtitle: t('settings.orbit.lede') },
@@ -2030,6 +2036,17 @@ export function SettingsDialog({
               <span>
                 <strong>{t('settings.envConfigure')}</strong>
                 <small>{`${t('settings.localCli')} / ${t('settings.modeApiMeta')}`}</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`settings-nav-item${activeSection === 'local-models' ? ' active' : ''}`}
+              onClick={() => setActiveSection('local-models')}
+            >
+              <Icon name="folder" size={18} />
+              <span>
+                <strong>Local Models</strong>
+                <small>GGUF scan and scorecards</small>
               </span>
             </button>
             <button
@@ -3245,6 +3262,8 @@ export function SettingsDialog({
               }}
             />
           ) : null}
+          {activeSection === 'local-models' ? <LocalModelsSection /> : null}
+
           {activeSection === 'integrations' ? <IntegrationsSection /> : null}
 
           {activeSection === 'mcpClient' ? <McpClientSection /> : null}

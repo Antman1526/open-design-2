@@ -2,6 +2,7 @@ import {
   fetchProjectFilePreview,
   fetchProjectFileText,
 } from './providers/registry';
+import { previewProjectSourceRetrieval } from './state/project-sources';
 import type {
   ChatAttachment,
   ChatMessage,
@@ -27,9 +28,13 @@ export async function historyWithApiAttachmentContext(
 ): Promise<ChatMessage[]> {
   const current = history.find((message) => message.id === messageId && message.role === 'user');
   const attachments = current?.attachments ?? [];
-  if (!current || attachments.length === 0) return history;
+  if (!current) return history;
 
-  const context = await buildApiAttachmentContext(projectId, attachments, projectFiles);
+  const [attachmentContext, sourceContext] = await Promise.all([
+    buildApiAttachmentContext(projectId, attachments, projectFiles),
+    buildIndexedSourceContext(projectId, current.content),
+  ]);
+  const context = `${attachmentContext}${sourceContext}`;
   if (!context) return history;
 
   return history.map((message) =>
@@ -37,6 +42,25 @@ export async function historyWithApiAttachmentContext(
       ? { ...message, content: `${message.content}${context}` }
       : message,
   );
+}
+
+async function buildIndexedSourceContext(projectId: string, query: string): Promise<string> {
+  if (!projectSourcesEnabled(projectId)) return '';
+  try {
+    const preview = await previewProjectSourceRetrieval(projectId, query);
+    return preview.context ? `\n\n${preview.context}` : '';
+  } catch {
+    return '';
+  }
+}
+
+function projectSourcesEnabled(projectId: string): boolean {
+  try {
+    if (typeof window === 'undefined') return true;
+    return window.localStorage.getItem(`open-design.projectSources.${projectId}.enabled`) !== 'false';
+  } catch {
+    return true;
+  }
 }
 
 async function buildApiAttachmentContext(

@@ -5,6 +5,7 @@ import {
   fetchProjectFilePreview,
   fetchProjectFileText,
 } from '../src/providers/registry';
+import { previewProjectSourceRetrieval } from '../src/state/project-sources';
 import type { ChatMessage, ProjectFile } from '../src/types';
 
 vi.mock('../src/providers/registry', async () => {
@@ -18,12 +19,23 @@ vi.mock('../src/providers/registry', async () => {
   };
 });
 
+vi.mock('../src/state/project-sources', () => ({
+  previewProjectSourceRetrieval: vi.fn().mockResolvedValue({
+    query: '',
+    chunks: [],
+    context: '',
+    generatedAt: 1,
+  }),
+}));
+
 const mockedFetchProjectFilePreview = vi.mocked(fetchProjectFilePreview);
 const mockedFetchProjectFileText = vi.mocked(fetchProjectFileText);
+const mockedPreviewProjectSourceRetrieval = vi.mocked(previewProjectSourceRetrieval);
 
 describe('historyWithApiAttachmentContext', () => {
   afterEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it('adds extracted document previews to the target user message', async () => {
@@ -41,6 +53,7 @@ describe('historyWithApiAttachmentContext', () => {
     );
 
     expect(mockedFetchProjectFilePreview).toHaveBeenCalledWith('project-1', 'brief.docx');
+    expect(mockedPreviewProjectSourceRetrieval).toHaveBeenCalledWith('project-1', 'Summarize this');
     expect(history[0]?.content).toContain('<attached-project-files>');
     expect(history[0]?.content).toContain('Hello world');
     expect(history[0]?.content).toContain('Second line');
@@ -95,6 +108,46 @@ describe('historyWithApiAttachmentContext', () => {
 
     expect(mockedFetchProjectFilePreview).toHaveBeenCalledWith('project-1', 'report.pdf');
     expect(history[0]?.content).toContain('Quarterly results');
+  });
+
+  it('adds indexed source context even without direct attachments', async () => {
+    mockedPreviewProjectSourceRetrieval.mockResolvedValue({
+      query: 'Use the brand brief',
+      chunks: [],
+      context: '<uploaded-project-sources>Brand green</uploaded-project-sources>',
+      generatedAt: 1,
+    });
+
+    const history = await historyWithApiAttachmentContext(
+      [userMessage('msg-1', 'Use the brand brief', [])],
+      'msg-1',
+      'project-1',
+      [],
+    );
+
+    expect(history[0]?.content).toContain('<uploaded-project-sources>');
+    expect(history[0]?.content).toContain('Brand green');
+  });
+
+  it('does not fetch indexed sources when project source injection is disabled', async () => {
+    const storage = new Map<string, string>();
+    vi.stubGlobal('window', {
+      localStorage: {
+        getItem: (key: string) => storage.get(key) ?? null,
+        setItem: (key: string, value: string) => storage.set(key, value),
+      },
+    });
+    storage.set('open-design.projectSources.project-1.enabled', 'false');
+
+    const history = await historyWithApiAttachmentContext(
+      [userMessage('msg-1', 'Use the brand brief', [])],
+      'msg-1',
+      'project-1',
+      [],
+    );
+
+    expect(mockedPreviewProjectSourceRetrieval).not.toHaveBeenCalled();
+    expect(history[0]?.content).toBe('Use the brand brief');
   });
 });
 

@@ -72,6 +72,27 @@ describe('local model routes', () => {
     expect(scoreBody.scorecards).toEqual([]);
   });
 
+  it('returns setup diagnostics for a local model root', async () => {
+    const root = await makeModelRoot();
+    const resp = await fetch(`${baseUrl}/api/local-models/diagnostics`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ root, llamaServerBin: path.join(root, 'missing-llama-server') }),
+    });
+
+    expect(resp.status).toBe(200);
+    const body = await resp.json() as {
+      root: { readable: boolean };
+      gguf: { readable: boolean };
+      llamaServer: { available: boolean };
+      modelCount: number;
+    };
+    expect(body.root.readable).toBe(true);
+    expect(body.gguf.readable).toBe(true);
+    expect(body.modelCount).toBe(1);
+    expect(body.llamaServer.available).toBe(false);
+  });
+
   it('rejects invalid patch payloads', async () => {
     const resp = await fetch(`${baseUrl}/api/local-models/does-not-matter`, {
       method: 'PATCH',
@@ -81,5 +102,16 @@ describe('local model routes', () => {
     expect(resp.status).toBe(400);
     const body = await resp.json() as { error?: { code?: string } };
     expect(body.error?.code).toBe('BAD_REQUEST');
+  });
+
+  it('returns not found for unknown model tests', async () => {
+    const resp = await fetch(`${baseUrl}/api/local-models/missing/test`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ task: 'design' }),
+    });
+    expect(resp.status).toBe(404);
+    const body = await resp.json() as { error?: { code?: string } };
+    expect(body.error?.code).toBe('LOCAL_MODEL_NOT_FOUND');
   });
 });

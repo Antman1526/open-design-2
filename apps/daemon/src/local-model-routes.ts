@@ -4,16 +4,22 @@ import type {
   LocalModelListResponse,
   LocalModelPatchRequest,
   LocalModelPatchResponse,
+  LocalModelDiagnosticsRequest,
+  LocalModelDiagnosticsResponse,
+  LocalModelTestRequest,
   LocalModelScanRequest,
   LocalModelScanResponse,
   LocalModelScorecardsResponse,
 } from '@open-design/contracts';
+import { LocalModelDiagnosticsRequestSchema, LocalModelTestRequestSchema } from '@open-design/contracts';
 import {
   DEFAULT_LOCAL_MODEL_ROOT,
+  diagnoseLocalModelSetup,
   listLocalModelScorecards,
   listLocalModels,
   scanLocalModels,
   setLocalModelEnabled,
+  testLocalModel,
   upsertLocalModels,
 } from './local-models.js';
 
@@ -30,6 +36,26 @@ export function registerLocalModelRoutes(app: Express, { db }: RegisterLocalMode
     const body: LocalModelListResponse = { models: listLocalModels(db) };
     res.json(body);
   });
+
+  app.post(
+    '/api/local-models/diagnostics',
+    async (
+      req: Request<unknown, unknown, LocalModelDiagnosticsRequest>,
+      res: Response<LocalModelDiagnosticsResponse | { error: { code: string; message: string } }>,
+    ) => {
+      const parsed = LocalModelDiagnosticsRequestSchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        return res.status(400).json({
+          error: {
+            code: 'BAD_REQUEST',
+            message: parsed.error.issues[0]?.message ?? 'invalid local model diagnostics request',
+          },
+        });
+      }
+      const result = await diagnoseLocalModelSetup(parsed.data);
+      return res.json(result);
+    },
+  );
 
   app.post(
     '/api/local-models/scan',
@@ -93,4 +119,42 @@ export function registerLocalModelRoutes(app: Express, { db }: RegisterLocalMode
     const body: LocalModelScorecardsResponse = { scorecards: listLocalModelScorecards(db) };
     res.json(body);
   });
+
+  app.post(
+    '/api/local-models/:id/test',
+    async (
+      req: Request<LocalModelRouteParams, unknown, LocalModelTestRequest>,
+      res: Response,
+    ) => {
+      const parsed = LocalModelTestRequestSchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        return res.status(400).json({
+          error: {
+            code: 'BAD_REQUEST',
+            message: parsed.error.issues[0]?.message ?? 'invalid local model test request',
+          },
+        });
+      }
+
+      try {
+        const result = await testLocalModel(db, req.params.id, parsed.data);
+        if (!result) {
+          return res.status(404).json({
+            error: {
+              code: 'LOCAL_MODEL_NOT_FOUND',
+              message: 'local model not found',
+            },
+          });
+        }
+        return res.status(result.ok ? 200 : 502).json(result);
+      } catch (error) {
+        return res.status(500).json({
+          error: {
+            code: 'LOCAL_MODEL_TEST_FAILED',
+            message: error instanceof Error ? error.message : String(error),
+          },
+        });
+      }
+    },
+  );
 }

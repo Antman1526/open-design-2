@@ -79,6 +79,37 @@ export interface LocalModelScorecardsResponse {
   scorecards: LocalModelScorecard[];
 }
 
+export const LocalModelDiagnosticsRequestSchema = z.object({
+  root: z.string().optional(),
+  llamaServerBin: z.string().optional(),
+});
+
+export type LocalModelDiagnosticsRequest = z.infer<typeof LocalModelDiagnosticsRequestSchema>;
+
+export const LocalModelPathCheckSchema = z.object({
+  path: z.string(),
+  exists: z.boolean(),
+  readable: z.boolean(),
+  message: z.string(),
+});
+
+export const LocalModelBinaryCheckSchema = z.object({
+  command: z.string(),
+  available: z.boolean(),
+  resolvedPath: z.string().optional(),
+  message: z.string(),
+});
+
+export const LocalModelDiagnosticsResponseSchema = z.object({
+  root: LocalModelPathCheckSchema,
+  gguf: LocalModelPathCheckSchema,
+  llamaServer: LocalModelBinaryCheckSchema,
+  modelCount: z.number().int().nonnegative(),
+  checkedAt: z.number().int().nonnegative(),
+});
+
+export type LocalModelDiagnosticsResponse = z.infer<typeof LocalModelDiagnosticsResponseSchema>;
+
 export interface LocalModelPatchRequest {
   enabled?: boolean;
 }
@@ -86,6 +117,46 @@ export interface LocalModelPatchRequest {
 export interface LocalModelPatchResponse {
   model: LocalModelRecord;
 }
+
+export const LocalModelServerModeSchema = z.enum([
+  'openai-compatible',
+  'ollama',
+  'llama-server',
+  'unavailable',
+]);
+
+export type LocalModelServerMode = z.infer<typeof LocalModelServerModeSchema>;
+
+export const LocalModelTestRequestSchema = z.object({
+  task: LocalModelTaskSchema.optional(),
+  prompt: z.string().optional(),
+  timeoutMs: z.number().int().positive().max(600_000).optional(),
+  llamaServerBin: z.string().optional(),
+});
+
+export type LocalModelTestRequest = z.infer<typeof LocalModelTestRequestSchema>;
+
+export const LocalModelTestResponseSchema = z.object({
+  ok: z.boolean(),
+  modelId: z.string().min(1),
+  task: LocalModelTaskSchema,
+  serverMode: LocalModelServerModeSchema,
+  latencyMs: z.number().int().nonnegative(),
+  sample: z.string(),
+  error: z.string().optional(),
+  scorecard: LocalModelScorecardSchema,
+});
+
+export type LocalModelTestResponse = z.infer<typeof LocalModelTestResponseSchema>;
+
+export const LocalModelRouteResponseSchema = z.object({
+  model: LocalModelRecordSchema.nullable(),
+  scorecard: LocalModelScorecardSchema.nullable(),
+  task: LocalModelTaskSchema,
+  reason: z.string(),
+});
+
+export type LocalModelRouteResponse = z.infer<typeof LocalModelRouteResponseSchema>;
 
 export function computeLocalModelOverallSuccess(input: LocalModelScoreInput): number {
   const parsed = LocalModelScoreInputSchema.parse(input);

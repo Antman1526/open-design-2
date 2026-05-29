@@ -12,6 +12,7 @@ import {
 } from '../utils/fileSystemErrors';
 import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
 import { getPluginFolderCandidates } from './design-files/pluginFolders';
+import { DesignSourcesPanel } from './DesignSourcesPanel';
 import { Icon } from './Icon';
 import { LiveArtifactBadges } from './LiveArtifactBadges';
 import { isRenderableSketchJson, SketchPreview } from './SketchPreview';
@@ -1059,6 +1060,7 @@ export function DesignFilesPanel({
             {kindFilterControl}
             {fileActions}
           </div>
+          <DesignSourcesPanel projectId={projectId} />
           {currentDir !== '' ? (
             <nav className="df-breadcrumbs" aria-label={t('designFiles.crumbs')}>
               <button

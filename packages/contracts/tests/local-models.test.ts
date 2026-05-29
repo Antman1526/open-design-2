@@ -2,9 +2,12 @@ import { describe, expect, it } from 'vitest';
 import {
   computeLocalModelOverallSuccess,
   inferLocalModelRoles,
+  LocalModelDiagnosticsResponseSchema,
   LocalModelRecordSchema,
+  LocalModelTestResponseSchema,
   LocalModelScorecardSchema,
 } from '../src/api/local-models';
+import { ProjectSourceSchema, ProjectSourceChunkSchema } from '../src/api/project-sources';
 
 describe('local model contracts', () => {
   it('accepts a discovered GGUF model record', () => {
@@ -85,5 +88,88 @@ describe('local model contracts', () => {
     });
 
     expect(parsed.task).toBe('code');
+  });
+
+  it('accepts local model test responses', () => {
+    const parsed = LocalModelTestResponseSchema.parse({
+      ok: true,
+      modelId: 'lm_test',
+      task: 'design',
+      serverMode: 'llama-server',
+      latencyMs: 1200,
+      sample: 'ready',
+      scorecard: {
+        modelId: 'lm_test',
+        task: 'design',
+        attempts: 1,
+        completionSuccess: 1,
+        designSuccess: 1,
+        userSuccess: 0,
+        performanceScore: 0.99,
+        overallSuccess: 0.649,
+        medianLatencyMs: 1200,
+        timeoutRate: 0,
+        crashRate: 0,
+        updatedAt: 1779757200000,
+      },
+    });
+
+    expect(parsed.serverMode).toBe('llama-server');
+  });
+
+  it('accepts local model diagnostics responses', () => {
+    const parsed = LocalModelDiagnosticsResponseSchema.parse({
+      root: {
+        path: '/Users/Antman/Desktop/AI_Models',
+        exists: true,
+        readable: true,
+        message: 'root is readable',
+      },
+      gguf: {
+        path: '/Users/Antman/Desktop/AI_Models/GGUF',
+        exists: true,
+        readable: true,
+        message: 'GGUF folder is readable',
+      },
+      llamaServer: {
+        command: 'llama-server',
+        available: false,
+        message: 'llama-server was not found',
+      },
+      modelCount: 18,
+      checkedAt: 1779757200000,
+    });
+
+    expect(parsed.modelCount).toBe(18);
+  });
+
+  it('accepts project source and chunk records', () => {
+    const source = ProjectSourceSchema.parse({
+      id: 'src_test',
+      projectId: 'project',
+      path: 'brief.md',
+      name: 'brief.md',
+      kind: 'text',
+      mime: 'text/markdown',
+      sizeBytes: 42,
+      status: 'indexed',
+      summary: '1 indexed chunk(s)',
+      chunkCount: 1,
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    const chunk = ProjectSourceChunkSchema.parse({
+      id: 'chunk',
+      sourceId: source.id,
+      projectId: source.projectId,
+      path: source.path,
+      chunkIndex: 0,
+      kind: 'text',
+      text: 'brand brief',
+      charCount: 11,
+      createdAt: 1,
+    });
+
+    expect(chunk.sourceId).toBe(source.id);
   });
 });

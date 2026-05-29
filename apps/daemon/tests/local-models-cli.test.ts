@@ -30,6 +30,17 @@ describe('od model CLI', () => {
           }));
           return;
         }
+        if (req.method === 'POST' && req.url === '/api/local-models/diagnostics') {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            root: { path: '/models', exists: true, readable: true, message: 'model root is readable' },
+            gguf: { path: '/models/GGUF', exists: true, readable: true, message: 'GGUF folder is readable' },
+            llamaServer: { command: 'llama-server', available: false, message: 'llama-server was not found on PATH' },
+            modelCount: 2,
+            checkedAt: 1779757200000,
+          }));
+          return;
+        }
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: { code: 'UNEXPECTED_TEST_ROUTE' } }));
       });
@@ -66,7 +77,24 @@ describe('od model CLI', () => {
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('od model scan');
+    expect(result.stdout).toContain('od model diagnose');
     expect(result.stdout).toContain('od model scorecard');
+  });
+
+  it('prints local model diagnostics', () => {
+    const result = spawnSync(
+      process.execPath,
+      ['--import', 'tsx', cliPath, 'model', 'diagnose', '--daemon-url', serverUrl ?? ''],
+      {
+        encoding: 'utf8',
+        env: { ...process.env, OD_DAEMON_URL: serverUrl ?? '' },
+      },
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('root\tok\tmodel root is readable');
+    expect(result.stdout).toContain('models\t2');
+    expect(result.stdout).toContain('llama-server\tfail\tllama-server was not found on PATH');
   });
 
   it('requires a subcommand', () => {

@@ -37,6 +37,20 @@ describe('resolveDataDir', () => {
     expect(resolveDataDir('', projectRoot)).toBe(path.join(projectRoot, '.od'));
   });
 
+  it('uses a writable user data directory when packaged prebundled runtime has no OD_DATA_DIR', () => {
+    const packagedRoot = path.join(
+      projectRoot,
+      'Open Design.app',
+      'Contents',
+      'Resources',
+      'app',
+      'prebundled',
+    );
+    const out = resolveDataDir(undefined, packagedRoot);
+
+    expect(out).toBe(path.join(fakeHome, 'Library', 'Application Support', 'Open Design', 'namespaces', 'default', 'data'));
+  });
+
   it('expands a leading ~/ against the user home directory', () => {
     const out = resolveDataDir('~/od-test', projectRoot);
     expect(out).toBe(path.join(fakeHome, 'od-test'));

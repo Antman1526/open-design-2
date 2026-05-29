@@ -384,6 +384,7 @@ import { registerMcpRoutes } from './mcp-routes.js';
 import { registerXaiRoutes } from './xai-routes.js';
 import { registerLiveArtifactRoutes } from './live-artifact-routes.js';
 import { registerLocalModelRoutes } from './local-model-routes.js';
+import { registerProjectSourceRoutes } from './project-source-routes.js';
 import { registerDesignSystemToolRoutes } from './design-system-tool-routes.js';
 import { registerDeployRoutes, registerDeploymentCheckRoutes } from './deploy-routes.js';
 import { registerMediaRoutes } from './media-routes.js';
@@ -1212,7 +1213,7 @@ function createMarketplaceFetcher(seedId, bundledMarketplaceEntries) {
 }
 
 export function resolveDataDir(raw, projectRoot) {
-  if (!raw) return path.join(projectRoot, '.od');
+  if (!raw) return defaultDataDir(projectRoot);
   // expandHomePrefix is shared with media-config.ts so OD_DATA_DIR and
   // OD_MEDIA_CONFIG_DIR can never split state under a $HOME-style value.
   // Some launchers (systemd unit files, NixOS modules, certain Docker
@@ -1246,6 +1247,19 @@ export function resolveDataDir(raw, projectRoot) {
     );
   }
   return resolved;
+}
+
+function defaultDataDir(projectRoot) {
+  if (isPackagedPrebundledRoot(projectRoot)) {
+    return path.join(os.homedir(), 'Library', 'Application Support', 'Open Design', 'namespaces', 'default', 'data');
+  }
+  return path.join(projectRoot, '.od');
+}
+
+function isPackagedPrebundledRoot(projectRoot) {
+  const normalized = projectRoot.split(path.sep).join('/');
+  return normalized.endsWith('/Open Design.app/Contents/Resources/app/prebundled') ||
+    normalized.includes('/Open Design.app/Contents/Resources/app/prebundled/');
 }
 const RUNTIME_DATA_DIR = resolveDataDir(process.env.OD_DATA_DIR, PROJECT_ROOT);
 const PLUGIN_LOCKFILE_PATH = path.join(RUNTIME_DATA_DIR, 'od-plugin-lock.json');
@@ -5189,6 +5203,11 @@ export async function startServer({
     projectFiles: projectFileDeps,
   });
   registerLocalModelRoutes(app, { db });
+  registerProjectSourceRoutes(app, {
+    db,
+    http: httpDeps,
+    paths: pathDeps,
+  });
   registerProjectRoutes(app, {
     db,
     design,

@@ -12,6 +12,7 @@ import { migrateCritique } from './critique/persistence.js';
 import { migrateLocalModels } from './local-models.js';
 import { migrateMediaTasks } from './media-tasks.js';
 import { migratePlugins } from './plugins/persistence.js';
+import { migrateProjectSources } from './project-sources.js';
 
 type SqliteDb = Database.Database;
 type DbRow = Record<string, any>;
@@ -280,6 +281,7 @@ function migrate(db: SqliteDb): void {
   migrateCritique(db);
   migrateMediaTasks(db);
   migrateLocalModels(db);
+  migrateProjectSources(db);
   migratePlugins(db);
 }
 

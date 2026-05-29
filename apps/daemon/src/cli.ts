@@ -149,7 +149,7 @@ const LIBRARY_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 const PROJECT_STRING_FLAGS = new Set([
   'daemon-url', 'name', 'skill', 'design-system', 'plugin', 'metadata-json',
   'pending-prompt', 'project', 'conversation', 'message', 'path', 'as',
-  'agent', 'model', 'snapshot-id', 'inputs', 'grant-caps', 'editor',
+  'agent', 'model', 'snapshot-id', 'inputs', 'grant-caps', 'editor', 'query',
 ]);
 const PROJECT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'follow']);
 // `od automation …` mirrors the Automations tab. Same surface, same
@@ -172,7 +172,7 @@ const MEMORY_STRING_FLAGS = new Set([
 const MEMORY_BOOLEAN_FLAGS = new Set([
   'help', 'h', 'json',
 ]);
-const MODEL_STRING_FLAGS = new Set(['daemon-url', 'root', 'task']);
+const MODEL_STRING_FLAGS = new Set(['daemon-url', 'root', 'task', 'prompt', 'timeout-ms', 'llama-server-bin']);
 const MODEL_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 // Hoisted because `runAutomation` is reachable through the top-of-file
 // SUBCOMMAND_MAP dispatch, which runs during module evaluation —
@@ -220,6 +220,7 @@ const SUBCOMMAND_MAP = {
   automations: runAutomation,
   memory: runMemory,
   model: runModel,
+  sources: runSources,
   run: runRun,
   files: runFiles,
   conversation: runConversation,
@@ -4177,6 +4178,26 @@ async function runModel(args) {
         }
       });
     }
+    case 'diagnose':
+    case 'diagnostics': {
+      const body = {
+        ...(flags.root ? { root: flags.root } : {}),
+        ...(flags['llama-server-bin'] ? { llamaServerBin: flags['llama-server-bin'] } : {}),
+      };
+      const resp = await modelFetch(base, `${base}/api/local-models/diagnostics`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!resp.ok) return structuredHttpFailure(resp);
+      const data = await resp.json();
+      return printModelOutput(data, flags, () => {
+        console.log(`root\t${data.root?.readable ? 'ok' : 'fail'}\t${data.root?.message ?? ''}`);
+        console.log(`gguf\t${data.gguf?.readable ? 'ok' : 'fail'}\t${data.gguf?.message ?? ''}`);
+        console.log(`models\t${data.modelCount ?? 0}`);
+        console.log(`llama-server\t${data.llamaServer?.available ? 'ok' : 'fail'}\t${data.llamaServer?.message ?? ''}`);
+      });
+    }
     case 'list': {
       const resp = await modelFetch(base, `${base}/api/local-models`);
       if (!resp.ok) return structuredHttpFailure(resp);
@@ -4209,6 +4230,39 @@ async function runModel(args) {
         for (const scorecard of filtered) {
           console.log(formatLocalModelScorecardLine(scorecard));
         }
+      });
+    }
+    case 'test': {
+      const id = positional[0];
+      if (!id) {
+        console.error('Usage: od model test <model-id> [--task <task>] [--prompt <text>] [--timeout-ms <ms>] [--json]');
+        process.exit(2);
+      }
+      const timeoutMs = flags['timeout-ms'] == null ? undefined : Number(flags['timeout-ms']);
+      const body = {
+        ...(flags.task ? { task: flags.task } : {}),
+        ...(flags.prompt ? { prompt: flags.prompt } : {}),
+        ...(Number.isFinite(timeoutMs) ? { timeoutMs } : {}),
+        ...(flags['llama-server-bin'] ? { llamaServerBin: flags['llama-server-bin'] } : {}),
+      };
+      const resp = await modelFetch(base, `${base}/api/local-models/${encodeURIComponent(id)}/test`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok && flags.json) {
+        process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+        process.exit(resp.status === 404 ? 75 : 1);
+      }
+      if (!resp.ok) {
+        console.error(data?.error?.message ?? `local model test failed: HTTP ${resp.status}`);
+        process.exit(resp.status === 404 ? 75 : 1);
+      }
+      return printModelOutput(data, flags, () => {
+        console.log(`${data.ok ? 'PASS' : 'FAIL'}\t${data.modelId}\t${data.serverMode}\t${data.latencyMs}ms`);
+        if (data.sample) console.log(data.sample);
+        if (data.error) console.error(data.error);
       });
     }
     case 'enable':
@@ -4251,7 +4305,9 @@ function modelHelpText() {
 
 Commands:
   od model scan [--root <path>] [--json] [--daemon-url <url>]
+  od model diagnose [--root <path>] [--llama-server-bin <path>] [--json] [--daemon-url <url>]
   od model list [--json] [--daemon-url <url>]
+  od model test <model-id> [--task <task>] [--prompt <text>] [--timeout-ms <ms>] [--llama-server-bin <path>] [--json]
   od model scorecard [--task <task>] [--json] [--daemon-url <url>]
   od model enable <model-id> [--json] [--daemon-url <url>]
   od model disable <model-id> [--json] [--daemon-url <url>]`;
@@ -4814,6 +4870,70 @@ Common options:
   }
 }
 
+async function runSources(args) {
+  if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
+    console.log(`Usage:
+  od sources list    <projectId> [--json]
+  od sources index   <projectId> [--json]
+  od sources preview <projectId> [--query <text>] [--json]
+
+Common options:
+  --daemon-url <url>   Open Design daemon HTTP base.
+  --json               Emit raw JSON.`);
+    process.exit(args.length === 0 ? 2 : 0);
+  }
+  const sub = args[0];
+  const rest = args.slice(1);
+  const flags = parseFlags(rest, { string: PROJECT_STRING_FLAGS, boolean: PROJECT_BOOLEAN_FLAGS });
+  const base = (await projectDaemonUrl(flags)).replace(/\/$/, '');
+  const positional = rest.filter((a) => !a.startsWith('-')
+    && a !== flags['daemon-url']
+    && a !== flags.query);
+  const projectId = positional[0];
+  if (!projectId) {
+    console.error(`Usage: od sources ${sub} <projectId>`);
+    process.exit(2);
+  }
+
+  switch (sub) {
+    case 'list': {
+      const resp = await fetch(`${base}/api/projects/${encodeURIComponent(projectId)}/sources`);
+      if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
+      const data = await resp.json();
+      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      for (const source of data.sources ?? []) {
+        console.log(`${source.status}\t${source.kind}\t${source.chunkCount}\t${source.path}`);
+      }
+      return;
+    }
+    case 'index': {
+      const resp = await fetch(`${base}/api/projects/${encodeURIComponent(projectId)}/sources/index`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
+      const data = await resp.json();
+      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      console.log(`[sources] indexed ${Array.isArray(data.sources) ? data.sources.length : 0} source(s)`);
+      return;
+    }
+    case 'preview': {
+      const url = new URL(`${base}/api/projects/${encodeURIComponent(projectId)}/sources/retrieval-preview`);
+      if (typeof flags.query === 'string') url.searchParams.set('query', flags.query);
+      const resp = await fetch(url);
+      if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
+      const data = await resp.json();
+      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      console.log(data.context || '(no indexed source context)');
+      return;
+    }
+    default:
+      console.error(`unknown subcommand: od sources ${sub}`);
+      process.exit(2);
+  }
+}
+
 async function runConversation(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
@@ -5062,6 +5182,7 @@ async function runDaemonStart(flags) {
       spawn(opener, [url], { detached: true, stdio: 'ignore' }).unref();
     });
   }
+  await new Promise(() => {});
 }
 
 async function runDaemonStatus(flags) {

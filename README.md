@@ -59,7 +59,10 @@ This fork adds local-file and local-LLM functionality:
 - Web research tools: External MCP now includes a Kindly Web Search preset for
   explicit web search/content retrieval. Local models do not browse the
   internet by themselves; they use MCP/search tools only when a run exposes
-  those tools and the returned content is treated as untrusted evidence.
+  those tools. Returned content is treated as untrusted evidence, and the
+  system prompt blocks external MCP web/content tools from fetching localhost,
+  private-network, link-local, or metadata-service URLs unless the user
+  explicitly provides the exact URL.
 - UI parity: Settings includes local model diagnostics/scan/test controls; the
   workspace includes a Design Sources panel.
 - CLI parity: `od model test` and `od sources` commands expose the same flows.

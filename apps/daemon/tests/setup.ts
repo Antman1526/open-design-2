@@ -44,6 +44,7 @@ if (!globalState[TEST_DATA_DIR_SYMBOL]) {
 // process to use one isolated data directory before any test imports server.ts,
 // so tests can never read or overwrite the developer's real repo `.od` data.
 process.env.OD_DATA_DIR = globalState[TEST_DATA_DIR_SYMBOL];
+process.env.OD_LOCAL_MODEL_SCAN_ON_STARTUP = '0';
 
 // Publish/share endpoints shell out through OD_NODE_BIN + OD_BIN (dist/cli.js).
 // Build the CLI artifact once per vitest process so package tests do not depend

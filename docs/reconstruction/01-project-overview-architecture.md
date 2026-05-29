@@ -108,6 +108,11 @@ The runner records latency, status, timeout/crash information, server mode, and
 sample output in scorecards. Routing can then select models by task instead of
 using filename guesses forever.
 
+At daemon launch, the server scans the configured local model root and persists
+new GGUF records before serving the UI. The default is enabled and uses
+`/Users/Antman/Desktop/AI_Models`; `OD_LOCAL_MODEL_ROOT` overrides the root and
+`OD_LOCAL_MODEL_SCAN_ON_STARTUP=0` disables the launch scan for isolated tests.
+
 ## Key New Source Flow
 
 Uploaded files become project sources:
@@ -157,4 +162,3 @@ The prompt boundary is explicit:
   long HTTP requests for large uploads?
 - Should packaged app permissions and first-run diagnostics be surfaced earlier
   in the UI for non-technical testers?
-

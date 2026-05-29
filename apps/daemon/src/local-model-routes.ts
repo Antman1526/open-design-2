@@ -17,10 +17,9 @@ import {
   diagnoseLocalModelSetup,
   listLocalModelScorecards,
   listLocalModels,
-  scanLocalModels,
+  scanAndPersistLocalModels,
   setLocalModelEnabled,
   testLocalModel,
-  upsertLocalModels,
 } from './local-models.js';
 
 interface RegisterLocalModelRoutesDeps {
@@ -66,13 +65,7 @@ export function registerLocalModelRoutes(app: Express, { db }: RegisterLocalMode
           : DEFAULT_LOCAL_MODEL_ROOT;
 
       try {
-        const scannedModels = await scanLocalModels(root);
-        upsertLocalModels(db, scannedModels);
-        const body: LocalModelScanResponse = {
-          root,
-          models: listLocalModels(db),
-          scannedAt: Date.now(),
-        };
+        const body: LocalModelScanResponse = await scanAndPersistLocalModels(db, root);
         res.json(body);
       } catch (error) {
         res.status(400).json({

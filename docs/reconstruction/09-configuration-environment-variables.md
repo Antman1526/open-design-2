@@ -18,6 +18,17 @@ LOCAL_MODEL_ROOT=/Users/Antman/Desktop/AI_Models
 GGUF_DIR=/Users/Antman/Desktop/AI_Models/GGUF
 ```
 
+Daemon launch scanning defaults to enabled. These environment variables control
+startup detection:
+
+```bash
+OD_LOCAL_MODEL_ROOT=/Users/Antman/Desktop/AI_Models
+OD_LOCAL_MODEL_SCAN_ON_STARTUP=1
+```
+
+Use `OD_LOCAL_MODEL_SCAN_ON_STARTUP=0` to suppress launch scanning for tests or
+diagnostic runs.
+
 ## Root Package Configuration
 
 Root package values:
@@ -149,4 +160,3 @@ od sources preview <projectId> --query "visual tone" --json
 - Should packaged builds include a first-run configuration wizard?
 - Should provider env var names be centralized in contracts or diagnostics?
 - Should source injection default be globally configurable for tester builds?
-

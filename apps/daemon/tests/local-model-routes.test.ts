@@ -3,6 +3,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { mkdtempSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import Database from 'better-sqlite3';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { startServer } from '../src/server.js';
 
@@ -24,6 +25,7 @@ describe('local model routes', () => {
     for (const dir of tempDirs.splice(0)) {
       rmSync(dir, { recursive: true, force: true });
     }
+    clearLocalModelTables();
   });
 
   afterAll(() => new Promise<void>((resolve) => server.close(() => resolve())));
@@ -35,6 +37,38 @@ describe('local model routes', () => {
     await writeFile(path.join(root, 'GGUF', 'Qwen2.5-14B-Instruct-Q4_K_M.gguf'), 'model-bytes');
     return root;
   }
+
+  function clearLocalModelTables(): void {
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) return;
+    const db = new Database(path.join(dataDir, 'app.sqlite'));
+    db.prepare('DELETE FROM local_model_scorecards').run();
+    db.prepare('DELETE FROM local_model_runs').run();
+    db.prepare('DELETE FROM local_models').run();
+    db.close();
+  }
+
+  it('detects new GGUF models during daemon startup when launch scanning is enabled', async () => {
+    const root = await makeModelRoot();
+    const started = (await startServer({
+      port: 0,
+      returnServer: true,
+      autoScanLocalModels: true,
+      localModelRoot: root,
+    })) as {
+      url: string;
+      server: http.Server;
+    };
+
+    try {
+      const resp = await fetch(`${started.url}/api/local-models`);
+      expect(resp.status).toBe(200);
+      const body = await resp.json() as { models: Array<{ fileName: string }> };
+      expect(body.models.map((model) => model.fileName)).toContain('Qwen2.5-14B-Instruct-Q4_K_M.gguf');
+    } finally {
+      await new Promise<void>((resolve) => started.server.close(() => resolve()));
+    }
+  });
 
   it('scans, lists, patches, and returns scorecards', async () => {
     const root = await makeModelRoot();

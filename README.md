@@ -44,6 +44,8 @@ This fork adds local-file and local-LLM functionality:
   size are indexed; OCR is attempted when local tooling is available.
 - Local model scanning: GGUF models are scanned from
   `/Users/Antman/Desktop/AI_Models/GGUF`.
+- Launch detection: the daemon scans for new GGUF models during startup so new
+  files copied into the model folder appear automatically after relaunch.
 - Auto-hybrid model runner: the daemon tries existing OpenAI-compatible local
   endpoints, then Ollama, then managed `llama-server`.
 - Scorecards: model tests record latency, completion status, timeout/crash
@@ -127,6 +129,17 @@ The runner resolves execution in this order:
    `http://127.0.0.1:8000/v1`.
 2. Existing Ollama endpoint at `http://127.0.0.1:11434/v1`.
 3. Managed `llama-server` for the selected GGUF model.
+
+On daemon launch, Open Design scans the configured model root automatically.
+The launch scan can be configured with:
+
+```bash
+OD_LOCAL_MODEL_ROOT=/Users/Antman/Desktop/AI_Models
+OD_LOCAL_MODEL_SCAN_ON_STARTUP=1
+```
+
+Set `OD_LOCAL_MODEL_SCAN_ON_STARTUP=0` only when you explicitly want to disable
+startup detection, such as isolated test runs.
 
 Useful CLI examples:
 
@@ -252,4 +265,3 @@ optimization or refactoring.
 ## License
 
 Apache-2.0. See `LICENSE`.
-

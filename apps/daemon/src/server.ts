@@ -384,6 +384,10 @@ import { registerMcpRoutes } from './mcp-routes.js';
 import { registerXaiRoutes } from './xai-routes.js';
 import { registerLiveArtifactRoutes } from './live-artifact-routes.js';
 import { registerLocalModelRoutes } from './local-model-routes.js';
+import {
+  DEFAULT_LOCAL_MODEL_ROOT,
+  scanAndPersistLocalModels,
+} from './local-models.js';
 import { registerProjectSourceRoutes } from './project-source-routes.js';
 import { registerDesignSystemToolRoutes } from './design-system-tool-routes.js';
 import { registerDeployRoutes, registerDeploymentCheckRoutes } from './deploy-routes.js';
@@ -3300,8 +3304,10 @@ export interface DaemonRuntimeContext {
 }
 
 export interface StartServerOptions {
+  autoScanLocalModels?: boolean;
   desktopPdfExporter?: DesktopPdfExporter | null;
   host?: string;
+  localModelRoot?: string;
   port?: number;
   returnServer?: boolean;
   runtime?: DaemonRuntimeContext | null;
@@ -3407,8 +3413,10 @@ function resolveAcpStageTimeoutMs(): number | undefined {
 }
 
 export async function startServer({
+  autoScanLocalModels,
   port = 7456,
   host = process.env.OD_BIND_HOST || '127.0.0.1',
+  localModelRoot,
   returnServer = false,
   desktopPdfExporter = null,
   runtime = null,
@@ -3756,6 +3764,22 @@ export async function startServer({
     next();
   });
   const db = openDatabase(PROJECT_ROOT, { dataDir: RUNTIME_DATA_DIR });
+  if (shouldScanLocalModelsOnStartup(autoScanLocalModels)) {
+    const root =
+      localModelRoot?.trim() ||
+      process.env.OD_LOCAL_MODEL_ROOT?.trim() ||
+      DEFAULT_LOCAL_MODEL_ROOT;
+    try {
+      const result = await scanAndPersistLocalModels(db, root);
+      if (!returnServer) {
+        console.log(`[od] local model startup scan found ${result.models.length} model(s) under ${root}`);
+      }
+    } catch (error) {
+      console.warn(
+        `[od] local model startup scan skipped: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
   // Wire the upload-destination bridge to this db so multer can route
   // file uploads into baseDir-rooted projects' actual folders.
   projectMetadataLookup = (id) => {
@@ -12476,6 +12500,11 @@ export async function startServer({
       reject(error);
     });
   });
+}
+
+function shouldScanLocalModelsOnStartup(explicit?: boolean): boolean {
+  if (typeof explicit === 'boolean') return explicit;
+  return process.env.OD_LOCAL_MODEL_SCAN_ON_STARTUP !== '0';
 }
 
 function randomId() {

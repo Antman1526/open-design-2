@@ -325,6 +325,25 @@ export function upsertLocalModels(db: SqliteDb, models: LocalModelRecord[]): voi
   tx(models);
 }
 
+export async function scanAndPersistLocalModels(
+  db: SqliteDb,
+  root = DEFAULT_LOCAL_MODEL_ROOT,
+  opts: { now?: number } = {},
+): Promise<{
+  root: string;
+  models: LocalModelRecord[];
+  scannedAt: number;
+}> {
+  const scannedAt = opts.now ?? Date.now();
+  const scannedModels = await scanLocalModels(root, { now: scannedAt });
+  upsertLocalModels(db, scannedModels);
+  return {
+    root,
+    models: listLocalModels(db),
+    scannedAt,
+  };
+}
+
 export function listLocalModels(db: SqliteDb): LocalModelRecord[] {
   const rows = db
     .prepare(

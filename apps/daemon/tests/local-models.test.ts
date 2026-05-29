@@ -14,6 +14,7 @@ import {
   migrateLocalModels,
   recordLocalModelAttempt,
   routeLocalModel,
+  scanAndPersistLocalModels,
   scanLocalModels,
   setLocalModelEnabled,
   upsertLocalModels,
@@ -164,6 +165,24 @@ describe('local model persistence', () => {
     const persisted = listLocalModels(db);
     expect(persisted).toHaveLength(1);
     expect(persisted[0]?.enabled).toBe(false);
+    db.close();
+  });
+
+  it('scans and persists models in one startup-safe operation', async () => {
+    const db = new Database(':memory:');
+    migrateLocalModels(db);
+
+    const root = makeTempDir();
+    const ggufDir = path.join(root, 'GGUF');
+    await mkdir(ggufDir, { recursive: true });
+    await writeFile(path.join(ggufDir, 'Gemma-3-4B-it-Q4_K_M.gguf'), 'model-bytes');
+
+    const result = await scanAndPersistLocalModels(db, root, { now: 1779757400000 });
+
+    expect(result.root).toBe(root);
+    expect(result.scannedAt).toBe(1779757400000);
+    expect(result.models).toHaveLength(1);
+    expect(listLocalModels(db)[0]?.fileName).toBe('Gemma-3-4B-it-Q4_K_M.gguf');
     db.close();
   });
 

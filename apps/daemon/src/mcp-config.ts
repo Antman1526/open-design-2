@@ -1142,6 +1142,54 @@ export const MCP_TEMPLATES: McpTemplate[] = [
     ],
   },
   {
+    id: 'kindly-web-search',
+    label: 'Kindly Web Search',
+    description:
+      'Web search plus content retrieval for coding and design research. Uses Serper, Tavily, or self-hosted SearXNG for search, then returns LLM-friendly page content from StackExchange, GitHub Issues, arXiv, Wikipedia, and general webpages. Requires uvx/Python 3.13+ and a Chromium-based browser for broad webpage extraction. Best used as an explicit agent tool for current external facts; results are still untrusted evidence and should be cited.',
+    transport: 'stdio',
+    category: 'utilities',
+    homepage: 'https://github.com/Shelpuk-AI-Technology-Consulting/kindly-web-search-mcp-server',
+    example:
+      'Search for current documentation on CSS anchor positioning and summarize the browser support with citations.',
+    command: 'uvx',
+    args: [
+      '--from',
+      'git+https://github.com/Shelpuk-AI-Technology-Consulting/kindly-web-search-mcp-server',
+      'kindly-web-search-mcp-server',
+      'start-mcp-server',
+    ],
+    envFields: [
+      {
+        key: 'SERPER_API_KEY',
+        label: 'Serper API key (preferred)',
+        placeholder: '<serper-api-key>',
+        secret: true,
+      },
+      {
+        key: 'TAVILY_API_KEY',
+        label: 'Tavily API key',
+        placeholder: '<tavily-api-key>',
+        secret: true,
+      },
+      {
+        key: 'SEARXNG_BASE_URL',
+        label: 'SearXNG base URL',
+        placeholder: 'https://searx.example.org',
+      },
+      {
+        key: 'GITHUB_TOKEN',
+        label: 'GitHub token (optional)',
+        placeholder: 'ghp_... or github_pat_...',
+        secret: true,
+      },
+      {
+        key: 'KINDLY_BROWSER_EXECUTABLE_PATH',
+        label: 'Browser executable path (optional)',
+        placeholder: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+      },
+    ],
+  },
+  {
     id: 'fetch',
     label: 'Fetch (HTTP)',
     description:

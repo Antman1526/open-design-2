@@ -3,6 +3,7 @@ import type { LocalModelRecord, LocalModelScorecard } from '@open-design/contrac
 
 import {
   diagnoseLocalModels,
+  getLocalModelScanStatus,
   listLocalModelScorecards,
   listLocalModels,
   scanLocalModels,
@@ -14,6 +15,7 @@ const DEFAULT_ROOT = '/Users/Antman/Desktop/AI_Models';
 const ROOT_STORAGE_KEY = 'open-design.localModelRoot';
 const LLAMA_SERVER_BIN_STORAGE_KEY = 'open-design.llamaServerBin';
 const TEST_TASKS = ['design', 'code', 'summary', 'critique', 'repair', 'embedding'] as const;
+const STARTUP_SCAN_POLL_MS = 250;
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -34,6 +36,16 @@ function bestScoreForModel(
   return scorecards
     .filter((scorecard) => scorecard.modelId === modelId)
     .sort((a, b) => b.overallSuccess - a.overallSuccess)[0] ?? null;
+}
+
+function formatStartupScanStatus(root: string | null): string {
+  return `Startup scan running${root ? ` for ${root}` : ''}...`;
+}
+
+function formatStartupScanComplete(scannedCount: number, modelCount: number): string {
+  const scannedLabel = scannedCount === 1 ? 'model' : 'models';
+  const trackedLabel = modelCount === 1 ? 'local model' : 'local models';
+  return `Startup scan found ${scannedCount} ${scannedLabel}; ${modelCount} ${trackedLabel} tracked`;
 }
 
 export function LocalModelsSection() {
@@ -65,20 +77,71 @@ export function LocalModelsSection() {
     setScorecards(body.scorecards);
   }, []);
 
+  const loadModelsAndScorecards = useCallback(async () => {
+    const [nextModels, nextScorecards] = await Promise.all([
+      listLocalModels(),
+      listLocalModelScorecards(),
+    ]);
+    return { nextModels, nextScorecards };
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
+    let pollTimer: ReturnType<typeof setTimeout> | null = null;
+
+    function scheduleStartupScanPoll() {
+      pollTimer = setTimeout(() => {
+        void pollStartupScan();
+      }, STARTUP_SCAN_POLL_MS);
+    }
+
+    async function pollStartupScan() {
+      try {
+        const scanStatus = await getLocalModelScanStatus();
+        if (cancelled) return;
+        if (scanStatus.status === 'running') {
+          setStatus(formatStartupScanStatus(scanStatus.root));
+          scheduleStartupScanPoll();
+          return;
+        }
+        const { nextModels, nextScorecards } = await loadModelsAndScorecards();
+        if (cancelled) return;
+        setModels(nextModels);
+        setScorecards(nextScorecards.scorecards);
+        if (scanStatus.status === 'completed') {
+          setStatus(formatStartupScanComplete(scanStatus.scannedCount, scanStatus.modelCount));
+        } else if (scanStatus.status === 'failed') {
+          setStatus(scanStatus.error ? `Startup scan failed: ${scanStatus.error}` : 'Startup scan failed');
+        } else {
+          setStatus(nextModels.length ? `${nextModels.length} local models` : 'No local models found');
+        }
+      } catch (err) {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : 'Failed to load local model scan status');
+        setStatus('');
+      }
+    }
 
     async function load() {
       try {
         setError('');
-        const [nextModels, nextScorecards] = await Promise.all([
-          listLocalModels(),
-          listLocalModelScorecards(),
+        const [{ nextModels, nextScorecards }, scanStatus] = await Promise.all([
+          loadModelsAndScorecards(),
+          getLocalModelScanStatus(),
         ]);
         if (cancelled) return;
         setModels(nextModels);
         setScorecards(nextScorecards.scorecards);
-        setStatus(nextModels.length ? `${nextModels.length} local models` : 'No local models found');
+        if (scanStatus.status === 'running') {
+          setStatus(formatStartupScanStatus(scanStatus.root));
+          scheduleStartupScanPoll();
+        } else if (scanStatus.status === 'completed') {
+          setStatus(formatStartupScanComplete(scanStatus.scannedCount, scanStatus.modelCount));
+        } else if (scanStatus.status === 'failed') {
+          setStatus(scanStatus.error ? `Startup scan failed: ${scanStatus.error}` : 'Startup scan failed');
+        } else {
+          setStatus(nextModels.length ? `${nextModels.length} local models` : 'No local models found');
+        }
       } catch (err) {
         if (cancelled) return;
         setError(err instanceof Error ? err.message : 'Failed to load local models');
@@ -89,8 +152,11 @@ export function LocalModelsSection() {
     void load();
     return () => {
       cancelled = true;
+      if (pollTimer) {
+        clearTimeout(pollTimer);
+      }
     };
-  }, []);
+  }, [loadModelsAndScorecards]);
 
   const scorecardByModel = useMemo(() => {
     const next = new Map<string, LocalModelScorecard | null>();

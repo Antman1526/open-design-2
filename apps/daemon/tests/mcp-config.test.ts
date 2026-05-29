@@ -648,6 +648,26 @@ describe('MCP_TEMPLATES', () => {
     ).toBe(true);
   });
 
+  it('includes the Kindly Web Search stdio template with provider env fields', () => {
+    const tpl = MCP_TEMPLATES.find((t) => t.id === 'kindly-web-search');
+    expect(tpl).toBeDefined();
+    expect(tpl?.transport).toBe('stdio');
+    expect(tpl?.category).toBe('utilities');
+    expect(tpl?.command).toBe('uvx');
+    expect(tpl?.args).toEqual([
+      '--from',
+      'git+https://github.com/Shelpuk-AI-Technology-Consulting/kindly-web-search-mcp-server',
+      'kindly-web-search-mcp-server',
+      'start-mcp-server',
+    ]);
+    const fields = new Set((tpl?.envFields ?? []).map((field) => field.key));
+    expect(fields.has('SERPER_API_KEY')).toBe(true);
+    expect(fields.has('TAVILY_API_KEY')).toBe(true);
+    expect(fields.has('SEARXNG_BASE_URL')).toBe(true);
+    expect(fields.has('GITHUB_TOKEN')).toBe(true);
+    expect(fields.has('KINDLY_BROWSER_EXECUTABLE_PATH')).toBe(true);
+  });
+
   it('includes the Pollinations stdio template with optional API key', () => {
     const tpl = MCP_TEMPLATES.find((t) => t.id === 'pollinations');
     expect(tpl).toBeDefined();

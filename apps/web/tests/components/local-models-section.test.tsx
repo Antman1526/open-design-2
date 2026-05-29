@@ -36,6 +36,17 @@ describe('LocalModelsSection', () => {
           headers: { 'content-type': 'application/json' },
         });
       }
+      if (url === '/api/local-models/scan-status') {
+        return new Response(JSON.stringify({
+          status: 'completed',
+          root: '/Users/Antman/Desktop/AI_Models',
+          scannedAt: 1,
+          scannedCount: 1,
+          modelCount: 1,
+        }), {
+          headers: { 'content-type': 'application/json' },
+        });
+      }
       if (url === '/api/local-models') {
         return new Response(JSON.stringify({ models: [model] }), {
           headers: { 'content-type': 'application/json' },
@@ -50,11 +61,68 @@ describe('LocalModelsSection', () => {
     expect(screen.getByRole('button', { name: 'Disable Qwen3-Coder' })).toBeTruthy();
   });
 
+  it('polls startup scan status and refreshes models when scan completes', async () => {
+    let listCalls = 0;
+    let statusCalls = 0;
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/local-models/scorecards') {
+        return new Response(JSON.stringify({ scorecards: [] }), {
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === '/api/local-models/scan-status') {
+        statusCalls += 1;
+        return new Response(JSON.stringify(statusCalls === 1
+          ? {
+              status: 'running',
+              root: '/Users/Antman/Desktop/AI_Models',
+              scannedAt: null,
+              scannedCount: 0,
+              modelCount: 0,
+            }
+          : {
+              status: 'completed',
+              root: '/Users/Antman/Desktop/AI_Models',
+              scannedAt: 1,
+              scannedCount: 1,
+              modelCount: 1,
+            }), {
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === '/api/local-models') {
+        listCalls += 1;
+        return new Response(JSON.stringify({ models: listCalls === 1 ? [] : [model] }), {
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    }));
+
+    render(<LocalModelsSection />);
+
+    expect(await screen.findByText(/Startup scan running/)).toBeTruthy();
+    expect(await screen.findByText('Qwen3-Coder')).toBeTruthy();
+    expect(screen.getByText('Startup scan found 1 model; 1 local model tracked')).toBeTruthy();
+  });
+
   it('lets the user choose the task used for model testing', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = input.toString();
       if (url === '/api/local-models/scorecards') {
         return new Response(JSON.stringify({ scorecards: [] }), {
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === '/api/local-models/scan-status') {
+        return new Response(JSON.stringify({
+          status: 'completed',
+          root: '/Users/Antman/Desktop/AI_Models',
+          scannedAt: 1,
+          scannedCount: 1,
+          modelCount: 1,
+        }), {
           headers: { 'content-type': 'application/json' },
         });
       }

@@ -48,12 +48,18 @@ This fork adds local-file and local-LLM functionality:
   files copied into the model folder appear automatically after relaunch.
 - Non-blocking startup scan: the daemon starts listening immediately and exposes
   scan progress at `/api/local-models/scan-status`.
+- Settings startup refresh: the Local Models panel polls startup scan status and
+  refreshes automatically when new launch-detected models are persisted.
 - Missing-model handling: models that disappear from the scanned folder are
   marked unavailable and excluded from routing until they are seen again.
 - Auto-hybrid model runner: the daemon tries existing OpenAI-compatible local
   endpoints, then Ollama, then managed `llama-server`.
 - Scorecards: model tests record latency, completion status, timeout/crash
   information, sample output, and success rate by task.
+- Web research tools: External MCP now includes a Kindly Web Search preset for
+  explicit web search/content retrieval. Local models do not browse the
+  internet by themselves; they use MCP/search tools only when a run exposes
+  those tools and the returned content is treated as untrusted evidence.
 - UI parity: Settings includes local model diagnostics/scan/test controls; the
   workspace includes a Design Sources panel.
 - CLI parity: `od model test` and `od sources` commands expose the same flows.

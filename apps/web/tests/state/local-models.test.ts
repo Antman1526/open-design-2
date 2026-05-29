@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   diagnoseLocalModels,
+  getLocalModelScanStatus,
   listLocalModels,
   scanLocalModels,
   setLocalModelEnabled,
@@ -58,6 +59,22 @@ describe('local model state helpers', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ root: '/models' }),
     });
+  });
+
+  it('getLocalModelScanStatus fetches startup scan status', async () => {
+    const body = {
+      status: 'running',
+      root: '/models',
+      scannedAt: null,
+      scannedCount: 0,
+      modelCount: 0,
+    };
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify(body)));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(getLocalModelScanStatus()).resolves.toEqual(body);
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/local-models/scan-status');
   });
 
   it('setLocalModelEnabled patches the enabled flag and returns body.model', async () => {

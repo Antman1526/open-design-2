@@ -3,6 +3,7 @@ import type {
   LocalModelPatchResponse,
   LocalModelRecord,
   LocalModelScanResponse,
+  LocalModelScanStatusResponse,
   LocalModelScorecardsResponse,
   LocalModelDiagnosticsResponse,
   LocalModelTask,
@@ -48,6 +49,13 @@ export async function scanLocalModels(root: string): Promise<LocalModelScanRespo
       body: JSON.stringify({ root }),
     }),
     'Failed to scan local models',
+  );
+}
+
+export async function getLocalModelScanStatus(): Promise<LocalModelScanStatusResponse> {
+  return readJson<LocalModelScanStatusResponse>(
+    await fetch('/api/local-models/scan-status'),
+    'Failed to load local model scan status',
   );
 }
 

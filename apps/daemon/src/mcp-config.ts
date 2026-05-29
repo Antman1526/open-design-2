@@ -61,6 +61,7 @@ export interface McpTemplateField {
 export type McpTemplateCategory =
   | 'image-generation'
   | 'image-editing'
+  | 'web-research'
   | 'web-capture'
   | 'design-systems'
   | 'ui-components'
@@ -1147,7 +1148,7 @@ export const MCP_TEMPLATES: McpTemplate[] = [
     description:
       'Web search plus content retrieval for coding and design research. Uses Serper, Tavily, or self-hosted SearXNG for search, then returns LLM-friendly page content from StackExchange, GitHub Issues, arXiv, Wikipedia, and general webpages. Requires uvx/Python 3.13+ and a Chromium-based browser for broad webpage extraction. Best used as an explicit agent tool for current external facts; results are still untrusted evidence and should be cited.',
     transport: 'stdio',
-    category: 'utilities',
+    category: 'web-research',
     homepage: 'https://github.com/Shelpuk-AI-Technology-Consulting/kindly-web-search-mcp-server',
     example:
       'Search for current documentation on CSS anchor positioning and summarize the browser support with citations.',

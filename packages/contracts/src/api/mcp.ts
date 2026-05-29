@@ -66,6 +66,7 @@ export interface McpTemplateField {
 export type McpTemplateCategory =
   | 'image-generation'
   | 'image-editing'
+  | 'web-research'
   | 'web-capture'
   | 'design-systems'
   | 'ui-components'

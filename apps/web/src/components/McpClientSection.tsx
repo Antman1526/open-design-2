@@ -229,6 +229,11 @@ const CATEGORY_ORDER: ReadonlyArray<{
     hint: 'Local post-processing, OCR and CV-driven edits.',
   },
   {
+    id: 'web-research',
+    label: 'Web research',
+    hint: 'Search and retrieve current external sources with citation context.',
+  },
+  {
     id: 'web-capture',
     label: 'Web capture',
     hint: 'Render a URL into an image so the agent can see what it built.',
@@ -581,14 +586,16 @@ function PickerPanel({
     visibleTotal += matched.length;
     if (all.length === 0) return null;
     if (hasQuery && matched.length === 0) return null;
-    // Default-expanded for the first three groups (the visual-asset
-    // pipeline most users will land here for); collapsed otherwise.
+    // Default-expanded for the first four groups: visual assets, web
+    // research for current external facts, and web capture. The rest stay
+    // collapsed until searched.
     // Active query forces every visible group open so matches surface
     // without an extra click.
     const defaultOpen =
       hasQuery ||
       cat.id === 'image-generation' ||
       cat.id === 'image-editing' ||
+      cat.id === 'web-research' ||
       cat.id === 'web-capture';
     return (
       <details

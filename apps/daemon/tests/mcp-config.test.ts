@@ -652,7 +652,7 @@ describe('MCP_TEMPLATES', () => {
     const tpl = MCP_TEMPLATES.find((t) => t.id === 'kindly-web-search');
     expect(tpl).toBeDefined();
     expect(tpl?.transport).toBe('stdio');
-    expect(tpl?.category).toBe('utilities');
+    expect(tpl?.category).toBe('web-research');
     expect(tpl?.command).toBe('uvx');
     expect(tpl?.args).toEqual([
       '--from',
@@ -740,6 +740,7 @@ describe('MCP_TEMPLATES', () => {
     const VALID = new Set([
       'image-generation',
       'image-editing',
+      'web-research',
       'web-capture',
       'design-systems',
       'ui-components',
@@ -750,6 +751,11 @@ describe('MCP_TEMPLATES', () => {
     for (const t of MCP_TEMPLATES) {
       expect(VALID.has(t.category)).toBe(true);
     }
+  });
+
+  it('groups web-research templates in declaration order', () => {
+    const ids = MCP_TEMPLATES.filter((t) => t.category === 'web-research').map((t) => t.id);
+    expect(ids).toEqual(['kindly-web-search']);
   });
 
   it('groups image-generation templates in declaration order', () => {

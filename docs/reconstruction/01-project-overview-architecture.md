@@ -109,9 +109,14 @@ sample output in scorecards. Routing can then select models by task instead of
 using filename guesses forever.
 
 At daemon launch, the server scans the configured local model root and persists
-new GGUF records before serving the UI. The default is enabled and uses
-`/Users/Antman/Desktop/AI_Models`; `OD_LOCAL_MODEL_ROOT` overrides the root and
+new GGUF records in the background after the daemon starts listening. The
+default is enabled and uses `/Users/Antman/Desktop/AI_Models`;
+`OD_LOCAL_MODEL_ROOT` overrides the root and
 `OD_LOCAL_MODEL_SCAN_ON_STARTUP=0` disables the launch scan for isolated tests.
+`GET /api/local-models/scan-status` exposes `idle`, `running`, `completed`, and
+`failed` states. Models that disappear from the scanned root are marked
+unavailable and excluded from automatic routing until a later scan sees them
+again.
 
 ## Key New Source Flow
 

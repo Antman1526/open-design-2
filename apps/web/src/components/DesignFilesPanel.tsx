@@ -1060,7 +1060,7 @@ export function DesignFilesPanel({
             {kindFilterControl}
             {fileActions}
           </div>
-          <DesignSourcesPanel projectId={projectId} />
+          <DesignSourcesPanel projectId={projectId} onUploadFiles={onUploadFiles} />
           {currentDir !== '' ? (
             <nav className="df-breadcrumbs" aria-label={t('designFiles.crumbs')}>
               <button

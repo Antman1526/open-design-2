@@ -33,7 +33,10 @@ export const LocalModelRecordSchema = z.object({
   digest: z.string().min(8),
   roles: z.array(LocalModelRoleSchema),
   enabled: z.boolean(),
+  available: z.boolean().default(true),
   discoveredAt: z.number().int().nonnegative(),
+  lastSeenAt: z.number().int().nonnegative().nullable().default(null),
+  missingSince: z.number().int().nonnegative().nullable().default(null),
   updatedAt: z.number().int().nonnegative(),
 });
 
@@ -67,8 +70,18 @@ export interface LocalModelScanRequest {
 
 export interface LocalModelScanResponse {
   root: string;
+  scannedModels: LocalModelRecord[];
   models: LocalModelRecord[];
   scannedAt: number;
+}
+
+export interface LocalModelScanStatusResponse {
+  status: 'idle' | 'running' | 'completed' | 'failed';
+  root: string | null;
+  scannedAt: number | null;
+  scannedCount: number;
+  modelCount: number;
+  error?: string;
 }
 
 export interface LocalModelListResponse {

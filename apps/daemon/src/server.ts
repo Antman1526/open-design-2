@@ -386,6 +386,7 @@ import { registerLiveArtifactRoutes } from './live-artifact-routes.js';
 import { registerLocalModelRoutes } from './local-model-routes.js';
 import {
   DEFAULT_LOCAL_MODEL_ROOT,
+  listLocalModels,
   scanAndPersistLocalModels,
 } from './local-models.js';
 import { registerProjectSourceRoutes } from './project-source-routes.js';
@@ -3308,6 +3309,7 @@ export interface StartServerOptions {
   desktopPdfExporter?: DesktopPdfExporter | null;
   host?: string;
   localModelRoot?: string;
+  localModelStartupScan?: typeof scanAndPersistLocalModels;
   port?: number;
   returnServer?: boolean;
   runtime?: DaemonRuntimeContext | null;
@@ -3417,6 +3419,7 @@ export async function startServer({
   port = 7456,
   host = process.env.OD_BIND_HOST || '127.0.0.1',
   localModelRoot,
+  localModelStartupScan = scanAndPersistLocalModels,
   returnServer = false,
   desktopPdfExporter = null,
   runtime = null,
@@ -3764,21 +3767,49 @@ export async function startServer({
     next();
   });
   const db = openDatabase(PROJECT_ROOT, { dataDir: RUNTIME_DATA_DIR });
+  let localModelScanStatus = {
+    status: 'idle',
+    root: null,
+    scannedAt: null,
+    scannedCount: 0,
+    modelCount: 0,
+  };
   if (shouldScanLocalModelsOnStartup(autoScanLocalModels)) {
     const root =
       localModelRoot?.trim() ||
       process.env.OD_LOCAL_MODEL_ROOT?.trim() ||
       DEFAULT_LOCAL_MODEL_ROOT;
-    try {
-      const result = await scanAndPersistLocalModels(db, root);
-      if (!returnServer) {
-        console.log(`[od] local model startup scan found ${result.models.length} model(s) under ${root}`);
-      }
-    } catch (error) {
-      console.warn(
-        `[od] local model startup scan skipped: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
+    localModelScanStatus = {
+      status: 'running',
+      root,
+      scannedAt: null,
+      scannedCount: 0,
+      modelCount: listLocalModels(db).length,
+    };
+    void localModelStartupScan(db, root)
+      .then((result) => {
+        localModelScanStatus = {
+          status: 'completed',
+          root,
+          scannedAt: result.scannedAt,
+          scannedCount: result.scannedModels.length,
+          modelCount: result.models.length,
+        };
+        if (!returnServer) {
+          console.log(`[od] local model startup scan found ${result.scannedModels.length} model(s) under ${root}`);
+        }
+      })
+      .catch((error) => {
+        localModelScanStatus = {
+          status: 'failed',
+          root,
+          scannedAt: Date.now(),
+          scannedCount: 0,
+          modelCount: listLocalModels(db).length,
+          error: error instanceof Error ? error.message : String(error),
+        };
+        console.warn(`[od] local model startup scan skipped: ${localModelScanStatus.error}`);
+      });
   }
   // Wire the upload-destination bridge to this db so multer can route
   // file uploads into baseDir-rooted projects' actual folders.
@@ -5226,7 +5257,7 @@ export async function startServer({
     projectStore: projectStoreDeps,
     projectFiles: projectFileDeps,
   });
-  registerLocalModelRoutes(app, { db });
+  registerLocalModelRoutes(app, { db, getScanStatus: () => localModelScanStatus });
   registerProjectSourceRoutes(app, {
     db,
     http: httpDeps,

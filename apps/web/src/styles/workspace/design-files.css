@@ -86,6 +86,21 @@
   background: var(--red-bg);
   color: var(--red);
 }
+.design-sources-panel {
+  padding-bottom: 8px;
+}
+.design-sources-controls {
+  align-items: flex-end;
+}
+.design-sources-query {
+  min-width: 220px;
+  flex: 1 1 220px;
+}
+.design-sources-context {
+  white-space: pre-wrap;
+  max-height: 220px;
+  overflow: auto;
+}
 .df-refresh-control {
   width: 28px;
   height: 28px;

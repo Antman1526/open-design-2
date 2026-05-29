@@ -29,6 +29,9 @@ OD_LOCAL_MODEL_SCAN_ON_STARTUP=1
 Use `OD_LOCAL_MODEL_SCAN_ON_STARTUP=0` to suppress launch scanning for tests or
 diagnostic runs.
 
+The launch scan is non-blocking. Runtime scan state is available at
+`GET /api/local-models/scan-status`.
+
 ## Root Package Configuration
 
 Root package values:

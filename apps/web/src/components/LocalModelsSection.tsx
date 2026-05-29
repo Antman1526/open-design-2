@@ -13,6 +13,7 @@ import {
 const DEFAULT_ROOT = '/Users/Antman/Desktop/AI_Models';
 const ROOT_STORAGE_KEY = 'open-design.localModelRoot';
 const LLAMA_SERVER_BIN_STORAGE_KEY = 'open-design.llamaServerBin';
+const TEST_TASKS = ['design', 'code', 'summary', 'critique', 'repair', 'embedding'] as const;
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -55,6 +56,7 @@ export function LocalModelsSection() {
   const [status, setStatus] = useState('Loading local models...');
   const [error, setError] = useState('');
   const [testingId, setTestingId] = useState('');
+  const [testTask, setTestTask] = useState<(typeof TEST_TASKS)[number]>('design');
   const [testResults, setTestResults] = useState<Record<string, string>>({});
   const [diagnostics, setDiagnostics] = useState<string[]>([]);
 
@@ -156,7 +158,7 @@ export function LocalModelsSection() {
       setStatus(`Testing ${model.name}...`);
       const result = await testLocalModel(
         model.id,
-        model.roles.includes('code') ? 'code' : 'design',
+        testTask,
         llamaServerBin,
       );
       setTestResults((current) => ({
@@ -200,6 +202,18 @@ export function LocalModelsSection() {
             </button>
           </div>
         </label>
+        <label className="field">
+          <span className="field-label">Test task</span>
+          <select
+            aria-label="Test task"
+            value={testTask}
+            onChange={(event) => setTestTask(event.target.value as (typeof TEST_TASKS)[number])}
+          >
+            {TEST_TASKS.map((task) => (
+              <option key={task} value={task}>{task}</option>
+            ))}
+          </select>
+        </label>
         {status ? <p role="status" className="hint">{status}</p> : null}
         {error ? <p role="alert" className="field-error">{error}</p> : null}
         {diagnostics.length > 0 ? (
@@ -219,6 +233,7 @@ export function LocalModelsSection() {
                   <h4>{model.name}</h4>
                   <p className="hint">
                     {model.roles.join(', ') || 'No roles'} - {formatSize(model.sizeBytes)}
+                    {model.available === false ? ' - missing from disk' : ''}
                   </p>
                   <p className="hint">
                     {bestScore

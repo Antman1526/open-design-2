@@ -57,8 +57,26 @@ Reports readability of the root, `GGUF` folder, and `llama-server` binary.
 ### `POST /api/local-models/scan`
 
 Scans `.gguf` files under `<root>/GGUF`, upserts `local_models`, and returns the
-updated list. Filename-derived family/role priors are used until scorecard data
-exists.
+updated list. The response includes both `scannedModels` for the current root
+and `models` for all persisted records. Filename-derived family/role priors are
+used until scorecard data exists.
+
+### `GET /api/local-models/scan-status`
+
+Returns daemon startup scan state:
+
+```json
+{
+  "status": "running",
+  "root": "/Users/Antman/Desktop/AI_Models",
+  "scannedAt": null,
+  "scannedCount": 0,
+  "modelCount": 18
+}
+```
+
+Missing or unmounted model files are retained as records with
+`available: false`; routing ignores unavailable models.
 
 ### `PATCH /api/local-models/:id`
 
@@ -221,4 +239,3 @@ app.post("/api/projects/:id/sources/index", async (req, res) => {
 - Should every route validate with contract Zod schemas at runtime?
 - Should CLI command output be generated from the same DTO serializer as HTTP?
 - Should local model test samples be redacted/truncated before persistence?
-

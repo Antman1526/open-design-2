@@ -4,8 +4,30 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import Database from 'better-sqlite3';
+import type { LocalModelRecord } from '@open-design/contracts';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { startServer } from '../src/server.js';
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
+async function eventually<T>(
+  read: () => Promise<T>,
+  predicate: (value: T) => boolean,
+): Promise<T> {
+  let latest = await read();
+  const deadline = Date.now() + 2000;
+  while (!predicate(latest) && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    latest = await read();
+  }
+  return latest;
+}
 
 describe('local model routes', () => {
   let server: http.Server;
@@ -61,10 +83,46 @@ describe('local model routes', () => {
     };
 
     try {
-      const resp = await fetch(`${started.url}/api/local-models`);
-      expect(resp.status).toBe(200);
-      const body = await resp.json() as { models: Array<{ fileName: string }> };
+      const body = await eventually(
+        async () => {
+          const resp = await fetch(`${started.url}/api/local-models`);
+          expect(resp.status).toBe(200);
+          return await resp.json() as { models: Array<{ fileName: string }> };
+        },
+        (value) => value.models.some((model) => model.fileName === 'Qwen2.5-14B-Instruct-Q4_K_M.gguf'),
+      );
       expect(body.models.map((model) => model.fileName)).toContain('Qwen2.5-14B-Instruct-Q4_K_M.gguf');
+    } finally {
+      await new Promise<void>((resolve) => started.server.close(() => resolve()));
+    }
+  });
+
+  it('starts listening before the launch model scan completes and exposes scan status', async () => {
+    const root = await makeModelRoot();
+    const pending = deferred<{
+      root: string;
+      models: LocalModelRecord[];
+      scannedModels: LocalModelRecord[];
+      scannedAt: number;
+    }>();
+    const started = (await startServer({
+      port: 0,
+      returnServer: true,
+      autoScanLocalModels: true,
+      localModelRoot: root,
+      localModelStartupScan: () => pending.promise,
+    })) as {
+      url: string;
+      server: http.Server;
+    };
+
+    try {
+      const runningResp = await fetch(`${started.url}/api/local-models/scan-status`);
+      expect(runningResp.status).toBe(200);
+      const running = await runningResp.json() as { status: string; root: string };
+      expect(running).toMatchObject({ status: 'running', root });
+
+      pending.resolve({ root, models: [], scannedModels: [], scannedAt: Date.now() });
     } finally {
       await new Promise<void>((resolve) => started.server.close(() => resolve()));
     }
@@ -79,8 +137,13 @@ describe('local model routes', () => {
       body: JSON.stringify({ root }),
     });
     expect(scanResp.status).toBe(200);
-    const scanBody = await scanResp.json() as { root: string; models: Array<{ id: string; enabled: boolean }> };
+    const scanBody = await scanResp.json() as {
+      root: string;
+      scannedModels: Array<{ id: string }>;
+      models: Array<{ id: string; enabled: boolean }>;
+    };
     expect(scanBody.root).toBe(root);
+    expect(scanBody.scannedModels).toHaveLength(1);
     expect(scanBody.models).toHaveLength(1);
     const scannedModel = scanBody.models[0];
     if (!scannedModel) throw new Error('expected scanned model');

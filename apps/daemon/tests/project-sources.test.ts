@@ -55,4 +55,20 @@ describe('project sources', () => {
     expect(paths).toEqual(['brief.md']);
     db.close();
   });
+
+  it('does not retrieve zero-score source chunks for a specific unmatched query', async () => {
+    const db = new Database(':memory:');
+    migrateProjectSources(db);
+    const projectsRoot = makeTempDir();
+    const projectId = 'project-a';
+    await mkdir(path.join(projectsRoot, projectId), { recursive: true });
+    await writeFile(path.join(projectsRoot, projectId, 'brief.md'), '# Brand\nUse green accents.');
+
+    await indexProjectSources(db, projectsRoot, projectId, null);
+    const preview = retrieveProjectSourceChunks(db, projectId, 'enterprise blockchain');
+
+    expect(preview.chunks).toEqual([]);
+    expect(preview.context).toBe('');
+    db.close();
+  });
 });

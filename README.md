@@ -46,6 +46,10 @@ This fork adds local-file and local-LLM functionality:
   `/Users/Antman/Desktop/AI_Models/GGUF`.
 - Launch detection: the daemon scans for new GGUF models during startup so new
   files copied into the model folder appear automatically after relaunch.
+- Non-blocking startup scan: the daemon starts listening immediately and exposes
+  scan progress at `/api/local-models/scan-status`.
+- Missing-model handling: models that disappear from the scanned folder are
+  marked unavailable and excluded from routing until they are seen again.
 - Auto-hybrid model runner: the daemon tries existing OpenAI-compatible local
   endpoints, then Ollama, then managed `llama-server`.
 - Scorecards: model tests record latency, completion status, timeout/crash
@@ -140,6 +144,16 @@ OD_LOCAL_MODEL_SCAN_ON_STARTUP=1
 
 Set `OD_LOCAL_MODEL_SCAN_ON_STARTUP=0` only when you explicitly want to disable
 startup detection, such as isolated test runs.
+
+Startup scan status:
+
+```text
+GET /api/local-models/scan-status
+```
+
+This returns `idle`, `running`, `completed`, or `failed` plus the scanned root
+and counts. Missing/unmounted model files remain listed for visibility but are
+marked unavailable and skipped by automatic routing.
 
 Useful CLI examples:
 

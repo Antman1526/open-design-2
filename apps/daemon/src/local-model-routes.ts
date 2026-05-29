@@ -9,6 +9,7 @@ import type {
   LocalModelTestRequest,
   LocalModelScanRequest,
   LocalModelScanResponse,
+  LocalModelScanStatusResponse,
   LocalModelScorecardsResponse,
 } from '@open-design/contracts';
 import { LocalModelDiagnosticsRequestSchema, LocalModelTestRequestSchema } from '@open-design/contracts';
@@ -24,16 +25,27 @@ import {
 
 interface RegisterLocalModelRoutesDeps {
   db: Database.Database;
+  getScanStatus?: () => LocalModelScanStatusResponse;
 }
 
 interface LocalModelRouteParams {
   id: string;
 }
 
-export function registerLocalModelRoutes(app: Express, { db }: RegisterLocalModelRoutesDeps) {
+export function registerLocalModelRoutes(app: Express, { db, getScanStatus }: RegisterLocalModelRoutesDeps) {
   app.get('/api/local-models', (_req, res: Response<LocalModelListResponse>) => {
     const body: LocalModelListResponse = { models: listLocalModels(db) };
     res.json(body);
+  });
+
+  app.get('/api/local-models/scan-status', (_req, res: Response<LocalModelScanStatusResponse>) => {
+    res.json(getScanStatus?.() ?? {
+      status: 'idle',
+      root: null,
+      scannedAt: null,
+      scannedCount: 0,
+      modelCount: listLocalModels(db).length,
+    });
   });
 
   app.post(

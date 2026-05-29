@@ -47,7 +47,10 @@ interface LocalModelRow {
   digest: string;
   rolesJson: string;
   enabled: number;
+  available: number;
   discoveredAt: number;
+  lastSeenAt: number | null;
+  missingSince: number | null;
   updatedAt: number;
 }
 
@@ -142,7 +145,10 @@ export async function scanLocalModels(
         digest: sha256Hex(path.resolve(modelPath)),
         roles: inferLocalModelRoles(entry.name),
         enabled: true,
+        available: true,
         discoveredAt: now,
+        lastSeenAt: now,
+        missingSince: null,
         updatedAt: now,
       }),
     );
@@ -235,7 +241,10 @@ export function migrateLocalModels(db: SqliteDb): void {
       digest        TEXT NOT NULL,
       roles_json    TEXT NOT NULL,
       enabled       INTEGER NOT NULL DEFAULT 1,
+      available     INTEGER NOT NULL DEFAULT 1,
       discovered_at INTEGER NOT NULL,
+      last_seen_at  INTEGER,
+      missing_since INTEGER,
       updated_at    INTEGER NOT NULL
     );
 
@@ -293,16 +302,26 @@ export function migrateLocalModels(db: SqliteDb): void {
   if (!runCols.some((col) => col.name === 'error')) {
     db.exec(`ALTER TABLE local_model_runs ADD COLUMN error TEXT`);
   }
+  const modelCols = db.prepare(`PRAGMA table_info(local_models)`).all() as Array<{ name: string }>;
+  if (!modelCols.some((col) => col.name === 'available')) {
+    db.exec(`ALTER TABLE local_models ADD COLUMN available INTEGER NOT NULL DEFAULT 1`);
+  }
+  if (!modelCols.some((col) => col.name === 'last_seen_at')) {
+    db.exec(`ALTER TABLE local_models ADD COLUMN last_seen_at INTEGER`);
+  }
+  if (!modelCols.some((col) => col.name === 'missing_since')) {
+    db.exec(`ALTER TABLE local_models ADD COLUMN missing_since INTEGER`);
+  }
 }
 
 export function upsertLocalModels(db: SqliteDb, models: LocalModelRecord[]): void {
   const insert = db.prepare(`
     INSERT INTO local_models
       (id, name, file_name, path, size_bytes, mtime_ms, digest, roles_json,
-       enabled, discovered_at, updated_at)
+       enabled, available, discovered_at, last_seen_at, missing_since, updated_at)
     VALUES
       (@id, @name, @fileName, @path, @sizeBytes, @mtimeMs, @digest, @rolesJson,
-       @enabled, @discoveredAt, @updatedAt)
+       @enabled, @available, @discoveredAt, @lastSeenAt, @missingSince, @updatedAt)
     ON CONFLICT(id) DO UPDATE SET
       name = excluded.name,
       file_name = excluded.file_name,
@@ -311,6 +330,9 @@ export function upsertLocalModels(db: SqliteDb, models: LocalModelRecord[]): voi
       mtime_ms = excluded.mtime_ms,
       digest = excluded.digest,
       roles_json = excluded.roles_json,
+      available = excluded.available,
+      last_seen_at = excluded.last_seen_at,
+      missing_since = excluded.missing_since,
       updated_at = excluded.updated_at
   `);
   const tx = db.transaction((records: LocalModelRecord[]) => {
@@ -319,6 +341,9 @@ export function upsertLocalModels(db: SqliteDb, models: LocalModelRecord[]): voi
         ...model,
         rolesJson: JSON.stringify(model.roles),
         enabled: model.enabled ? 1 : 0,
+        available: model.available === false ? 0 : 1,
+        lastSeenAt: model.lastSeenAt ?? model.updatedAt,
+        missingSince: model.missingSince ?? null,
       });
     }
   });
@@ -331,17 +356,48 @@ export async function scanAndPersistLocalModels(
   opts: { now?: number } = {},
 ): Promise<{
   root: string;
+  scannedModels: LocalModelRecord[];
   models: LocalModelRecord[];
   scannedAt: number;
 }> {
   const scannedAt = opts.now ?? Date.now();
   const scannedModels = await scanLocalModels(root, { now: scannedAt });
   upsertLocalModels(db, scannedModels);
+  markMissingLocalModels(db, root, scannedModels, scannedAt);
   return {
     root,
+    scannedModels,
     models: listLocalModels(db),
     scannedAt,
   };
+}
+
+function markMissingLocalModels(
+  db: SqliteDb,
+  root: string,
+  scannedModels: LocalModelRecord[],
+  now: number,
+): void {
+  const resolvedRoot = path.resolve(root);
+  const scanRoot =
+    path.basename(resolvedRoot).toLowerCase() === 'gguf'
+      ? resolvedRoot
+      : path.join(resolvedRoot, 'GGUF');
+  const scannedIds = new Set(scannedModels.map((model) => model.id));
+  const missing = listLocalModels(db)
+    .filter((model) => path.resolve(model.path).startsWith(`${scanRoot}${path.sep}`))
+    .filter((model) => !scannedIds.has(model.id));
+  const update = db.prepare(
+    `UPDATE local_models
+        SET available = 0,
+            missing_since = COALESCE(missing_since, ?),
+            updated_at = ?
+      WHERE id = ?`,
+  );
+  const tx = db.transaction((records: LocalModelRecord[]) => {
+    for (const model of records) update.run(now, now, model.id);
+  });
+  tx(missing);
 }
 
 export function listLocalModels(db: SqliteDb): LocalModelRecord[] {
@@ -357,7 +413,10 @@ export function listLocalModels(db: SqliteDb): LocalModelRecord[] {
          digest,
          roles_json AS rolesJson,
          enabled,
+         available,
          discovered_at AS discoveredAt,
+         last_seen_at AS lastSeenAt,
+         missing_since AS missingSince,
          updated_at AS updatedAt
        FROM local_models
        ORDER BY file_name ASC`,
@@ -390,7 +449,10 @@ export function setLocalModelEnabled(
          digest,
          roles_json AS rolesJson,
          enabled,
+         available,
          discovered_at AS discoveredAt,
+         last_seen_at AS lastSeenAt,
+         missing_since AS missingSince,
          updated_at AS updatedAt
        FROM local_models
        WHERE id = ?`,
@@ -412,7 +474,10 @@ export function getLocalModel(db: SqliteDb, id: string): LocalModelRecord | null
          digest,
          roles_json AS rolesJson,
          enabled,
+         available,
          discovered_at AS discoveredAt,
+         last_seen_at AS lastSeenAt,
+         missing_since AS missingSince,
          updated_at AS updatedAt
        FROM local_models
        WHERE id = ?`,
@@ -445,7 +510,7 @@ export function listLocalModelScorecards(db: SqliteDb): LocalModelScorecard[] {
 }
 
 export function routeLocalModel(db: SqliteDb, task: LocalModelTask): LocalModelRouteResponse {
-  const enabled = listLocalModels(db).filter((model) => model.enabled);
+  const enabled = listLocalModels(db).filter((model) => model.enabled && model.available);
   if (enabled.length === 0) {
     return LocalModelRouteResponseSchema.parse({
       model: null,
@@ -659,7 +724,10 @@ function mapLocalModelRow(row: LocalModelRow): LocalModelRecord {
     digest: row.digest,
     roles: JSON.parse(row.rolesJson),
     enabled: row.enabled === 1,
+    available: row.available === 1,
     discoveredAt: row.discoveredAt,
+    lastSeenAt: row.lastSeenAt,
+    missingSince: row.missingSince,
     updatedAt: row.updatedAt,
   });
 }

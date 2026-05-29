@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ProjectSource } from '@open-design/contracts';
 import {
   indexProjectSources,
@@ -6,8 +6,15 @@ import {
   previewProjectSourceRetrieval,
 } from '../state/project-sources';
 
-export function DesignSourcesPanel({ projectId }: { projectId: string }) {
+export function DesignSourcesPanel({
+  projectId,
+  onUploadFiles,
+}: {
+  projectId: string;
+  onUploadFiles?: (files: File[]) => void;
+}) {
   const enabledKey = `open-design.projectSources.${projectId}.enabled`;
+  const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const [sources, setSources] = useState<ProjectSource[]>([]);
   const [status, setStatus] = useState('Loading sources...');
   const [error, setError] = useState('');
@@ -21,6 +28,7 @@ export function DesignSourcesPanel({ projectId }: { projectId: string }) {
     }
   });
   const [loadedEnabledKey, setLoadedEnabledKey] = useState(enabledKey);
+  const [showAll, setShowAll] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -85,13 +93,23 @@ export function DesignSourcesPanel({ projectId }: { projectId: string }) {
     }
   }
 
+  function handleUploadChange(files: FileList | null) {
+    const selected = Array.from(files ?? []);
+    if (selected.length === 0) return;
+    onUploadFiles?.(selected);
+    setStatus(`${selected.length} file(s) queued for upload. Index sources after upload completes.`);
+    if (uploadInputRef.current) uploadInputRef.current.value = '';
+  }
+
+  const visibleSources = showAll ? sources : sources.slice(0, 6);
+
   return (
     <section className="df-section design-sources-panel" aria-label="Design Sources">
       <div className="df-section-label">
         Design Sources
         <span className="df-section-count">{sources.length}</span>
       </div>
-      <div className="df-controls-row">
+      <div className="df-controls-row design-sources-controls">
         <label className="field-row">
           <input
             type="checkbox"
@@ -103,7 +121,26 @@ export function DesignSourcesPanel({ projectId }: { projectId: string }) {
         <button type="button" className="df-action" onClick={() => void handleIndex()}>
           Index sources
         </button>
-        <label className="field" style={{ minWidth: 220 }}>
+        {onUploadFiles ? (
+          <>
+            <input
+              ref={uploadInputRef}
+              aria-label="Upload design sources"
+              type="file"
+              multiple
+              className="sr-only"
+              onChange={(event) => handleUploadChange(event.target.files)}
+            />
+            <button
+              type="button"
+              className="df-action"
+              onClick={() => uploadInputRef.current?.click()}
+            >
+              Upload sources
+            </button>
+          </>
+        ) : null}
+        <label className="field design-sources-query">
           <span className="sr-only">Source query</span>
           <input
             value={query}
@@ -119,7 +156,7 @@ export function DesignSourcesPanel({ projectId }: { projectId: string }) {
       {error ? <p role="alert" className="field-error">{error}</p> : null}
       {sources.length > 0 ? (
         <div className="settings-card-list">
-          {sources.slice(0, 6).map((source) => (
+          {visibleSources.map((source) => (
             <div key={source.id} className="agent-model-row">
               <div className="agent-model-row-head">
                 <div>
@@ -130,10 +167,19 @@ export function DesignSourcesPanel({ projectId }: { projectId: string }) {
               </div>
             </div>
           ))}
+          {sources.length > 6 ? (
+            <button
+              type="button"
+              className="df-action"
+              onClick={() => setShowAll((current) => !current)}
+            >
+              {showAll ? 'Show fewer sources' : `Show all ${sources.length} sources`}
+            </button>
+          ) : null}
         </div>
       ) : null}
       {context ? (
-        <pre className="field-hint" style={{ whiteSpace: 'pre-wrap', maxHeight: 220, overflow: 'auto' }}>
+        <pre className="field-hint design-sources-context">
           {context}
         </pre>
       ) : null}

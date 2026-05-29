@@ -171,6 +171,7 @@ export function retrieveProjectSourceChunks(
     .all(projectId) as ChunkRow[];
   const ranked = rows
     .map((row) => ({ row, score: scoreChunk(row.text, queryTerms) }))
+    .filter(({ score }) => queryTerms.length === 0 || score > 0)
     .sort((a, b) => b.score - a.score || a.row.path.localeCompare(b.row.path))
     .slice(0, MAX_RETRIEVAL_CHUNKS)
     .map(({ row }) => mapChunkRow(row));

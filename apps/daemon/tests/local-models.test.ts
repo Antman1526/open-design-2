@@ -181,8 +181,33 @@ describe('local model persistence', () => {
 
     expect(result.root).toBe(root);
     expect(result.scannedAt).toBe(1779757400000);
+    expect(result.scannedModels).toHaveLength(1);
     expect(result.models).toHaveLength(1);
     expect(listLocalModels(db)[0]?.fileName).toBe('Gemma-3-4B-it-Q4_K_M.gguf');
+    db.close();
+  });
+
+  it('marks models unavailable when they disappear from the scanned root and excludes them from routing', async () => {
+    const db = new Database(':memory:');
+    migrateLocalModels(db);
+
+    const root = makeTempDir();
+    const ggufDir = path.join(root, 'GGUF');
+    await mkdir(ggufDir, { recursive: true });
+    const modelPath = path.join(ggufDir, 'Mistral-7B-Instruct-Q4_K_M.gguf');
+    await writeFile(modelPath, 'model-bytes');
+
+    const first = await scanAndPersistLocalModels(db, root, { now: 1779757400000 });
+    expect(first.models[0]?.available).toBe(true);
+
+    rmSync(modelPath, { force: true });
+    const second = await scanAndPersistLocalModels(db, root, { now: 1779757500000 });
+    const missing = second.models.find((model) => model.fileName === 'Mistral-7B-Instruct-Q4_K_M.gguf');
+
+    expect(second.scannedModels).toHaveLength(0);
+    expect(missing?.available).toBe(false);
+    expect(missing?.missingSince).toBe(1779757500000);
+    expect(routeLocalModel(db, 'design').model).toBeNull();
     db.close();
   });
 

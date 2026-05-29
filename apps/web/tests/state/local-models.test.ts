@@ -47,7 +47,7 @@ describe('local model state helpers', () => {
   });
 
   it('scanLocalModels posts a scan root and returns the response body', async () => {
-    const body = { root: '/models', models: [model], scannedAt: 1 };
+    const body = { root: '/models', scannedModels: [model], models: [model], scannedAt: 1 };
     const fetchMock = vi.fn(async () => new Response(JSON.stringify(body)));
     vi.stubGlobal('fetch', fetchMock);
 

@@ -21,6 +21,14 @@ export interface McpResearchBridgeResult {
   server: McpServerConfig;
   findings: ResearchFindings;
   prompt: string;
+  attempts: McpResearchBridgeAttempt[];
+}
+
+export interface McpResearchBridgeAttempt {
+  serverId: string;
+  ok: boolean;
+  sourceCount?: number;
+  error?: string;
 }
 
 export type McpToolCaller = (
@@ -33,17 +41,21 @@ export type McpToolCaller = (
 export function selectMcpWebResearchServer(
   servers: McpServerConfig[],
 ): McpServerConfig | null {
-  return (
-    servers.find(
-      (server) =>
-        server.enabled &&
-        server.transport === 'stdio' &&
-        typeof server.command === 'string' &&
-        server.command.trim().length > 0 &&
-        (server.templateId === 'kindly-web-search' ||
-          server.id === 'kindly-web-search' ||
-          server.id.startsWith('kindly-web-search-')),
-    ) ?? null
+  return selectMcpWebResearchServers(servers)[0] ?? null;
+}
+
+export function selectMcpWebResearchServers(
+  servers: McpServerConfig[],
+): McpServerConfig[] {
+  return servers.filter(
+    (server) =>
+      server.enabled &&
+      server.transport === 'stdio' &&
+      typeof server.command === 'string' &&
+      server.command.trim().length > 0 &&
+      (server.templateId === 'kindly-web-search' ||
+        server.id === 'kindly-web-search' ||
+        server.id.startsWith('kindly-web-search-')),
   );
 }
 
@@ -54,34 +66,53 @@ export async function resolveMcpResearchBridge(
   const query = resolveResearchQuery(input.research, input.message);
   if (!query) return null;
 
-  const server = selectMcpWebResearchServer(input.servers);
-  if (!server) return null;
+  const servers = selectMcpWebResearchServers(input.servers);
+  if (servers.length === 0) return null;
 
   const maxSources = normalizeMaxSources(input.research.maxSources);
-  const timeoutMs = normalizeTimeoutMs(server.env?.KINDLY_TOOL_TOTAL_TIMEOUT_SECONDS);
   const caller = input.callTool ?? callStdioMcpTool;
-  const raw = await caller(
-    server,
-    'web_search',
-    {
-      query,
-      num_results: maxSources,
-      return_full_pages: true,
-    },
-    { timeoutMs },
-  );
-  const findings = normalizeMcpSearchResult({
-    raw,
-    query,
-    provider: server.id,
-    fetchedAt: input.now ? input.now() : Date.now(),
-  });
-  if (findings.sources.length === 0) return null;
-  return {
-    server,
-    findings,
-    prompt: renderMcpResearchBridgePrompt(findings),
-  };
+  const attempts: McpResearchBridgeAttempt[] = [];
+
+  for (const server of servers) {
+    const timeoutMs = normalizeTimeoutMs(server.env?.KINDLY_TOOL_TOTAL_TIMEOUT_SECONDS);
+    try {
+      const raw = await caller(
+        server,
+        'web_search',
+        {
+          query,
+          num_results: maxSources,
+          return_full_pages: true,
+        },
+        { timeoutMs },
+      );
+      const findings = normalizeMcpSearchResult({
+        raw,
+        query,
+        provider: server.id,
+        fetchedAt: input.now ? input.now() : Date.now(),
+      });
+      if (findings.sources.length === 0) {
+        attempts.push({ serverId: server.id, ok: false, error: 'no sources returned' });
+        continue;
+      }
+      attempts.push({ serverId: server.id, ok: true, sourceCount: findings.sources.length });
+      return {
+        server,
+        findings,
+        prompt: renderMcpResearchBridgePrompt(findings),
+        attempts,
+      };
+    } catch (err) {
+      attempts.push({
+        serverId: server.id,
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  return null;
 }
 
 export function renderMcpResearchBridgePrompt(findings: ResearchFindings): string {

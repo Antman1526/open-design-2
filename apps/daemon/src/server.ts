@@ -241,7 +241,7 @@ import { listElevenLabsVoiceOptions } from './elevenlabs-voices.js';
 import { searchResearch, ResearchError } from './research/index.js';
 import {
   resolveMcpResearchBridge,
-  selectMcpWebResearchServer,
+  selectMcpWebResearchServers,
 } from './research/mcp-bridge.js';
 import { renderResearchCommandContract } from './prompts/research-contract.js';
 import { openBrowser } from './browser-open.js';
@@ -10397,10 +10397,10 @@ export async function startServer({
       extraAllowedDirs,
     });
     let mcpResearchBridgePrompt = '';
-    const mcpResearchServer = research?.enabled
-      ? selectMcpWebResearchServer(enabledExternalMcp)
-      : null;
-    if (mcpResearchServer) {
+    const mcpResearchServers = research?.enabled
+      ? selectMcpWebResearchServers(enabledExternalMcp)
+      : [];
+    if (mcpResearchServers.length > 0) {
       const toolUseId = `mcp-research-${runId}`;
       const emitResearchBridgeEvent = (payload) => {
         persistRunEventToAssistantMessage(db, run, 'agent', payload);
@@ -10411,7 +10411,7 @@ export async function startServer({
         id: toolUseId,
         name: 'web_search',
         input: {
-          serverId: mcpResearchServer.id,
+          serverIds: mcpResearchServers.map((server) => server.id),
           query:
             typeof research.query === 'string' && research.query.trim()
               ? research.query.trim()
@@ -10435,6 +10435,7 @@ export async function startServer({
             content: JSON.stringify({
               provider: bridge.findings.provider,
               query: bridge.findings.query,
+              attempts: bridge.attempts,
               sources: bridge.findings.sources.map((source) => ({
                 title: source.title,
                 url: source.url,

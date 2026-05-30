@@ -289,6 +289,9 @@ process.stdin.on('end', () => {
         },
         prompt:
           '## Web Research Evidence\n\n[1] Local LLM web search\nURL: https://example.test/local-llm-web-search',
+        attempts: [
+          { serverId: 'kindly-web-search', ok: true, sourceCount: 1 },
+        ],
       }),
     }) as { url: string; server: http.Server };
     try {

@@ -61,6 +61,9 @@ This fork adds local-file and local-LLM functionality:
   models do not browse the internet by themselves; when Research is enabled,
   the daemon first tries an enabled web-research MCP server and injects cited
   evidence into the prompt for runtimes that cannot call MCP tools directly.
+  Multiple enabled Kindly/SearXNG entries are tried in order, so a later
+  instance can be used when an earlier public endpoint errors or returns no
+  sources.
   Returned content is treated as untrusted evidence, and the system prompt
   blocks external MCP web/content tools from fetching localhost,
   private-network, link-local, or metadata-service URLs unless the user

@@ -4,11 +4,12 @@ import {
   renderMcpResearchBridgePrompt,
   resolveMcpResearchBridge,
   selectMcpWebResearchServer,
+  selectMcpWebResearchServers,
 } from '../src/research/mcp-bridge.js';
 
 describe('MCP research bridge', () => {
   it('selects enabled Kindly stdio servers as web research providers', () => {
-    const server = selectMcpWebResearchServer([
+    const servers = selectMcpWebResearchServers([
       {
         id: 'kindly-web-search',
         label: 'Kindly Web Search',
@@ -19,7 +20,66 @@ describe('MCP research bridge', () => {
       },
     ]);
 
-    expect(server?.id).toBe('kindly-web-search');
+    expect(servers.map((server) => server.id)).toEqual(['kindly-web-search']);
+    expect(selectMcpWebResearchServer(servers)?.id).toBe('kindly-web-search');
+  });
+
+  it('falls back to the next enabled web research server when one fails', async () => {
+    const callTool = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('searx one unavailable'))
+      .mockResolvedValueOnce({
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              results: [
+                {
+                  title: 'Fallback SearXNG result',
+                  link: 'https://example.test/fallback',
+                  snippet: 'The second SearXNG instance returned a result.',
+                },
+              ],
+            }),
+          },
+        ],
+      });
+
+    const bridge = await resolveMcpResearchBridge({
+      research: { enabled: true, query: 'fallback search', maxSources: 2 },
+      message: 'ignored',
+      servers: [
+        {
+          id: 'kindly-web-search-searx-a',
+          templateId: 'kindly-web-search',
+          transport: 'stdio',
+          enabled: true,
+          command: 'uvx',
+          env: { SEARXNG_BASE_URL: 'https://searx.invalid/' },
+        },
+        {
+          id: 'kindly-web-search-searx-b',
+          templateId: 'kindly-web-search',
+          transport: 'stdio',
+          enabled: true,
+          command: 'uvx',
+          env: { SEARXNG_BASE_URL: 'https://searxng.example/' },
+        },
+      ],
+      callTool,
+    });
+
+    expect(callTool).toHaveBeenCalledTimes(2);
+    expect(callTool.mock.calls.map((call) => call[0].id)).toEqual([
+      'kindly-web-search-searx-a',
+      'kindly-web-search-searx-b',
+    ]);
+    expect(bridge?.server.id).toBe('kindly-web-search-searx-b');
+    expect(bridge?.findings.sources[0]?.url).toBe('https://example.test/fallback');
+    expect(bridge?.attempts).toEqual([
+      { serverId: 'kindly-web-search-searx-a', ok: false, error: 'searx one unavailable' },
+      { serverId: 'kindly-web-search-searx-b', ok: true, sourceCount: 1 },
+    ]);
   });
 
   it('runs a web_search call and renders untrusted cited evidence', async () => {

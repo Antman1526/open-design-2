@@ -5,6 +5,7 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  __forTestNormalizeLocalDesignOutput,
   computeRollingScorecard,
   __localModelCandidateNames,
   __localModelServerPorts,
@@ -13,6 +14,7 @@ import {
   localModelIdForPath,
   migrateLocalModels,
   recordLocalModelAttempt,
+  resolveLocalModelForSpecifier,
   routeLocalModel,
   scanAndPersistLocalModels,
   scanLocalModels,
@@ -241,5 +243,63 @@ describe('local model persistence', () => {
     expect(route.model?.id).toBe(model.id);
     expect(route.reason).toMatch(/scorecard|role/);
     db.close();
+  });
+});
+
+describe('local model chat selection', () => {
+  it('resolves custom:ai model labels to scanned GGUF models', () => {
+    const db = new Database(':memory:');
+    try {
+      migrateLocalModels(db);
+      upsertLocalModels(db, [
+        {
+          id: 'lm_qwen3_6_27b_q4_k_m_gguf_abcdef123456',
+          name: 'Qwen3.6-27B-Q4_K_M',
+          fileName: 'Qwen3.6-27B-Q4_K_M.gguf',
+          path: '/models/GGUF/Qwen3.6-27B-Q4_K_M.gguf',
+          sizeBytes: 1,
+          mtimeMs: 1,
+          digest: 'abcdef123456',
+          roles: ['design'],
+          enabled: true,
+          available: true,
+          discoveredAt: 1,
+          lastSeenAt: 1,
+          missingSince: null,
+          updatedAt: 1,
+        },
+      ]);
+
+      const resolved = resolveLocalModelForSpecifier(db, 'custom:ai/qwen3.6:latest', 'design');
+
+      expect(resolved.model?.fileName).toBe('Qwen3.6-27B-Q4_K_M.gguf');
+      expect(resolved.reason).toContain('matched local model name');
+    } finally {
+      db.close();
+    }
+  });
+
+  it('wraps local HTML/code-fence output as an artifact block', () => {
+    const normalized = __forTestNormalizeLocalDesignOutput(
+      'Here is the design:\n\n```html\n<!doctype html><html><body><main>Save the date</main></body></html>\n```',
+    );
+
+    expect(normalized).toContain('<artifact identifier="local-model-design"');
+    expect(normalized).toContain('<main>Save the date</main>');
+    expect(normalized).toContain('</artifact>');
+  });
+
+  it('leaves existing artifact blocks unchanged', () => {
+    const artifact = '<artifact identifier="x" type="text/html" title="X"><html></html></artifact>';
+
+    expect(__forTestNormalizeLocalDesignOutput(artifact)).toBe(artifact);
+  });
+
+  it('wraps plain local design text as a visible fallback artifact', () => {
+    const normalized = __forTestNormalizeLocalDesignOutput('Save the date for Ashley & Anthony\n\nJune 14');
+
+    expect(normalized).toContain('<artifact identifier="local-model-design"');
+    expect(normalized).toContain('Save the date for Ashley &amp; Anthony');
+    expect(normalized).toContain('<h1>Design Draft</h1>');
   });
 });

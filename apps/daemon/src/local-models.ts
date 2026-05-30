@@ -89,6 +89,8 @@ type ManagedServer = {
 const managedServers = new Map<string, ManagedServer>();
 const DEFAULT_TEST_PROMPT = 'Reply with one short sentence confirming this local model is ready.';
 const DEFAULT_TEST_TIMEOUT_MS = 45_000;
+const DEFAULT_GENERATION_TIMEOUT_MS = 10 * 60_000;
+const DEFAULT_GENERATION_MAX_TOKENS = 8192;
 const LOCAL_OPENAI_BASE_URLS = [
   'http://127.0.0.1:8080/v1',
   'http://127.0.0.1:8000/v1',
@@ -96,6 +98,16 @@ const LOCAL_OPENAI_BASE_URLS = [
 const OLLAMA_OPENAI_BASE_URL = 'http://127.0.0.1:11434/v1';
 const LLAMA_SERVER_PORT_RETRIES = 5;
 let cleanupHooksRegistered = false;
+
+function positiveEnvNumber(name: string, fallback: number): number {
+  const parsed = Number(process.env[name]);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function finiteEnvNumber(name: string, fallback: number): number {
+  const parsed = Number(process.env[name]);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
 
 export function localModelIdForPath(modelPath: string): string {
   const resolvedPath = path.resolve(modelPath);
@@ -541,6 +553,148 @@ export function routeLocalModel(db: SqliteDb, task: LocalModelTask): LocalModelR
   });
 }
 
+export function isLocalModelSpecifier(modelId: string | null | undefined): boolean {
+  const raw = modelId?.trim();
+  if (!raw) return false;
+  return raw.startsWith('custom:ai/') || raw.startsWith('local:') || raw.startsWith('lm_');
+}
+
+export function resolveLocalModelForSpecifier(
+  db: SqliteDb,
+  modelId: string | null | undefined,
+  task: LocalModelTask,
+): { model: LocalModelRecord | null; reason: string } {
+  const enabled = listLocalModels(db).filter((model) => model.enabled && model.available);
+  if (enabled.length === 0) return { model: null, reason: 'no enabled local models' };
+
+  const raw = modelId?.trim() ?? '';
+  if (!raw || raw === 'default') {
+    const routed = routeLocalModel(db, task);
+    return { model: routed.model, reason: routed.reason };
+  }
+
+  const direct = enabled.find((model) => model.id === raw);
+  if (direct) return { model: direct, reason: 'matched local model id' };
+
+  const requested = normalizeLocalModelToken(
+    raw
+      .replace(/^custom:ai\//i, '')
+      .replace(/^local:/i, '')
+      .replace(/:latest$/i, ''),
+  );
+  if (requested) {
+    const scored = enabled
+      .map((model) => ({
+        model,
+        score: localModelMatchScore(requested, model),
+      }))
+      .filter((entry) => entry.score > 0)
+      .sort((a, b) => b.score - a.score || a.model.fileName.localeCompare(b.model.fileName));
+    if (scored[0]) {
+      return { model: scored[0].model, reason: `matched local model name (${raw})` };
+    }
+  }
+
+  const routed = routeLocalModel(db, task);
+  return { model: routed.model, reason: `no local model matched ${raw}; ${routed.reason}` };
+}
+
+export async function completeWithLocalModel(
+  db: SqliteDb,
+  input: {
+    model: LocalModelRecord;
+    prompt: string;
+    task?: LocalModelTask;
+    timeoutMs?: number;
+    maxTokens?: number;
+    temperature?: number;
+    llamaServerBin?: string;
+  },
+): Promise<{
+  modelId: string;
+  modelName: string;
+  serverMode: LocalModelServerMode;
+  text: string;
+  scorecard: LocalModelScorecard;
+}> {
+  const task = input.task ?? 'design';
+  const timeoutMs = input.timeoutMs ?? positiveEnvNumber('OD_LOCAL_MODEL_GENERATION_TIMEOUT_MS', DEFAULT_GENERATION_TIMEOUT_MS);
+  const maxTokens = input.maxTokens ?? positiveEnvNumber('OD_LOCAL_MODEL_MAX_TOKENS', DEFAULT_GENERATION_MAX_TOKENS);
+  const temperature = input.temperature ?? finiteEnvNumber('OD_LOCAL_MODEL_TEMPERATURE', 0.2);
+  const startedAt = Date.now();
+  let serverMode: LocalModelServerMode = 'unavailable';
+  let text = '';
+  let error: string | undefined;
+  let timedOut = false;
+  let crashed = false;
+
+  for (const candidate of candidateEndpoints(input.model)) {
+    try {
+      serverMode = candidate.mode;
+      text = await completeOpenAICompatible({
+        baseUrl: candidate.baseUrl,
+        model: candidate.model,
+        prompt: input.prompt,
+        timeoutMs,
+        maxTokens,
+        temperature,
+      });
+      error = undefined;
+      break;
+    } catch (err) {
+      error = err instanceof Error ? err.message : String(err);
+      timedOut ||= /abort|timeout/i.test(error);
+    }
+  }
+
+  if (!text) {
+    try {
+      serverMode = 'llama-server';
+      const server = await ensureLlamaServer(input.model, timeoutMs, input.llamaServerBin);
+      text = await completeOpenAICompatible({
+        baseUrl: `http://127.0.0.1:${server.port}/v1`,
+        model: input.model.name,
+        prompt: input.prompt,
+        timeoutMs,
+        maxTokens,
+        temperature,
+      });
+      error = undefined;
+    } catch (err) {
+      error = err instanceof Error ? err.message : String(err);
+      timedOut ||= /abort|timeout/i.test(error);
+      crashed ||= /exited|spawn/i.test(error);
+    }
+  }
+
+  const latencyMs = Math.max(0, Date.now() - startedAt);
+  const completed = text.trim().length > 0;
+  const normalizedText = task === 'design' ? normalizeLocalDesignOutput(text) : text;
+  const designPassed = completed && (task !== 'design' || containsArtifact(normalizedText));
+  const scorecard = recordLocalModelAttempt(db, {
+    modelId: input.model.id,
+    task,
+    latencyMs,
+    completed,
+    designPassed,
+    userMarkedSuccess: false,
+    timedOut,
+    crashed,
+    serverMode,
+    sample: normalizedText,
+    ...(error ? { error } : {}),
+  });
+  if (!completed) throw new Error(error || 'empty local model completion');
+
+  return {
+    modelId: input.model.id,
+    modelName: input.model.name,
+    serverMode,
+    text: normalizedText,
+    scorecard,
+  };
+}
+
 export async function testLocalModel(
   db: SqliteDb,
   id: string,
@@ -749,6 +903,8 @@ async function completeOpenAICompatible(input: {
   model: string;
   prompt: string;
   timeoutMs: number;
+  maxTokens?: number;
+  temperature?: number;
 }): Promise<string> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), input.timeoutMs);
@@ -760,8 +916,8 @@ async function completeOpenAICompatible(input: {
       body: JSON.stringify({
         model: input.model,
         messages: [{ role: 'user', content: input.prompt }],
-        max_tokens: 64,
-        temperature: 0,
+        max_tokens: input.maxTokens ?? 64,
+        temperature: input.temperature ?? 0,
         stream: false,
       }),
     });
@@ -774,6 +930,98 @@ async function completeOpenAICompatible(input: {
   } finally {
     clearTimeout(timer);
   }
+}
+
+function normalizeLocalDesignOutput(text: string): string {
+  const trimmed = text.trim();
+  if (!trimmed || containsArtifact(trimmed)) return trimmed;
+  const fencedHtml = extractFencedHtml(trimmed);
+  const html = fencedHtml ?? (looksLikeHtmlDocument(trimmed) ? trimmed : null);
+  if (!html) return plainTextDesignArtifact(trimmed);
+  return `<artifact identifier="local-model-design" type="text/html" title="Local model design">\n${html.trim()}\n</artifact>`;
+}
+
+export const __forTestNormalizeLocalDesignOutput = normalizeLocalDesignOutput;
+
+function containsArtifact(text: string): boolean {
+  return /<artifact\b[\s\S]*<\/artifact>/i.test(text);
+}
+
+function extractFencedHtml(text: string): string | null {
+  const match = text.match(/```(?:html|htm)?\s*\n([\s\S]*?)```/i);
+  return match?.[1]?.trim() || null;
+}
+
+function looksLikeHtmlDocument(text: string): boolean {
+  return /<!doctype html\b/i.test(text) || /<html[\s>]/i.test(text) || /<(body|main|section|style|script|div|article)\b/i.test(text);
+}
+
+function plainTextDesignArtifact(text: string): string {
+  const paragraphs = text
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean)
+    .map((paragraph) => `<p>${escapeHtml(paragraph).replace(/\n/g, '<br>')}</p>`)
+    .join('\n        ');
+  return `<artifact identifier="local-model-design" type="text/html" title="Local model design">
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+      :root { color-scheme: light; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #eef2f3; color: #1f2933; }
+      main { width: min(720px, calc(100vw - 40px)); min-height: 520px; display: grid; place-items: center; padding: 56px; box-sizing: border-box; background: #fffdfa; border: 1px solid #d4dde1; box-shadow: 0 22px 70px rgba(31, 41, 51, 0.16); }
+      section { width: 100%; max-width: 520px; text-align: center; }
+      h1 { margin: 0 0 24px; font-size: 42px; line-height: 1.05; font-weight: 600; letter-spacing: 0; color: #6b2d5c; }
+      p { margin: 0 0 16px; font-size: 20px; line-height: 1.5; }
+      p:last-child { margin-bottom: 0; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section>
+        <h1>Design Draft</h1>
+        ${paragraphs || '<p>No design text was returned.</p>'}
+      </section>
+    </main>
+  </body>
+</html>
+</artifact>`;
+}
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function localModelMatchScore(requested: string, model: LocalModelRecord): number {
+  const candidates = [
+    model.id,
+    model.name,
+    model.fileName,
+    ...__localModelCandidateNames(model),
+  ].map(normalizeLocalModelToken).filter(Boolean);
+  let best = 0;
+  for (const candidate of candidates) {
+    if (candidate === requested) best = Math.max(best, 100);
+    if (candidate.startsWith(requested) || requested.startsWith(candidate)) best = Math.max(best, 85);
+    if (candidate.includes(requested) || requested.includes(candidate)) best = Math.max(best, 70);
+    const requestedParts = requested.match(/[a-z]+|\d+(?:\.\d+)?/g) ?? [];
+    if (requestedParts.length > 0 && requestedParts.every((part) => candidate.includes(part))) {
+      best = Math.max(best, 50 + requestedParts.length);
+    }
+  }
+  return best;
+}
+
+function normalizeLocalModelToken(value: string): string {
+  return value.toLowerCase().replace(/\.gguf$/i, '').replace(/[^a-z0-9.]+/g, '');
 }
 
 async function ensureLlamaServer(

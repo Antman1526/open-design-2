@@ -15,7 +15,9 @@ export function renderResearchCommandContract(
     '',
     'The user enabled Research for this run. Research is an agent-callable command, not hidden prompt context.',
     '',
-    'Use this command when current external facts would improve the answer. Choose the form that matches your shell:',
+    'When current external facts would improve the answer, first use an enabled MCP web-search tool when one is available. For Kindly Web Search, call `web_search` with the canonical query and use returned sources as external untrusted evidence.',
+    '',
+    'If MCP web search is not available, use this research command. Choose the form that matches your shell:',
     '',
     '```bash',
     `"$OD_NODE_BIN" "$OD_BIN" research search --query "<search query>" --max-sources ${maxSources}`,
@@ -56,8 +58,8 @@ export function renderResearchCommandContract(
       safeQuery.replace(/```/g, '`\u200b`\u200b`'),
       '```',
       '',
-      'For `/search` requests, the first tool action must be the research command with this canonical query.',
-      'If the OD command fails because Tavily is not configured or unavailable, report the actual stderr/error, then use your own search capability as fallback and label the fallback clearly.',
+      'For `/search` requests, first use an enabled MCP web-search tool when one is available.',
+      'If MCP web search is not available and the OD command fails because Tavily is not configured or unavailable, report the actual stderr/error, then use your own search capability as fallback and label the fallback clearly.',
       'After the command returns JSON or fallback search results, create the Markdown report in Design Files, then summarize the findings with citations.',
     );
   }

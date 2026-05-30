@@ -239,6 +239,10 @@ import { buildDesktopPdfExportInput } from './pdf-export.js';
 import { generateMedia } from './media.js';
 import { listElevenLabsVoiceOptions } from './elevenlabs-voices.js';
 import { searchResearch, ResearchError } from './research/index.js';
+import {
+  resolveMcpResearchBridge,
+  selectMcpWebResearchServer,
+} from './research/mcp-bridge.js';
 import { renderResearchCommandContract } from './prompts/research-contract.js';
 import { openBrowser } from './browser-open.js';
 import {
@@ -3310,6 +3314,7 @@ export interface StartServerOptions {
   host?: string;
   localModelRoot?: string;
   localModelStartupScan?: typeof scanAndPersistLocalModels;
+  mcpResearchBridgeResolver?: typeof resolveMcpResearchBridge;
   port?: number;
   returnServer?: boolean;
   runtime?: DaemonRuntimeContext | null;
@@ -3420,6 +3425,7 @@ export async function startServer({
   host = process.env.OD_BIND_HOST || '127.0.0.1',
   localModelRoot,
   localModelStartupScan = scanAndPersistLocalModels,
+  mcpResearchBridgeResolver = resolveMcpResearchBridge,
   returnServer = false,
   desktopPdfExporter = null,
   runtime = null,
@@ -10390,6 +10396,73 @@ export async function startServer({
       codexGeneratedImagesDir,
       extraAllowedDirs,
     });
+    let mcpResearchBridgePrompt = '';
+    const mcpResearchServer = research?.enabled
+      ? selectMcpWebResearchServer(enabledExternalMcp)
+      : null;
+    if (mcpResearchServer) {
+      const toolUseId = `mcp-research-${runId}`;
+      const emitResearchBridgeEvent = (payload) => {
+        persistRunEventToAssistantMessage(db, run, 'agent', payload);
+        design.runs.emit(run, 'agent', payload);
+      };
+      emitResearchBridgeEvent({
+        type: 'tool_use',
+        id: toolUseId,
+        name: 'web_search',
+        input: {
+          serverId: mcpResearchServer.id,
+          query:
+            typeof research.query === 'string' && research.query.trim()
+              ? research.query.trim()
+              : typeof message === 'string'
+                ? message.trim().slice(0, 1000)
+                : '',
+        },
+      });
+      try {
+        const bridge = await mcpResearchBridgeResolver({
+          research,
+          message,
+          servers: enabledExternalMcp,
+        });
+        if (bridge) {
+          mcpResearchBridgePrompt = bridge.prompt;
+          emitResearchBridgeEvent({
+            type: 'tool_result',
+            toolUseId,
+            isError: false,
+            content: JSON.stringify({
+              provider: bridge.findings.provider,
+              query: bridge.findings.query,
+              sources: bridge.findings.sources.map((source) => ({
+                title: source.title,
+                url: source.url,
+                provider: source.provider,
+              })),
+            }),
+          });
+        } else {
+          emitResearchBridgeEvent({
+            type: 'tool_result',
+            toolUseId,
+            isError: true,
+            content: 'No MCP web-search sources were returned; falling back to the research command contract.',
+          });
+        }
+      } catch (err) {
+        console.warn(
+          '[research:mcp-bridge] search failed:',
+          err && err.message ? err.message : err,
+        );
+        emitResearchBridgeEvent({
+          type: 'tool_result',
+          toolUseId,
+          isError: true,
+          content: `MCP web search failed: ${err && err.message ? err.message : String(err)}`,
+        });
+      }
+    }
     const researchCommandContract = resolveResearchCommandContract(
       research,
       message,
@@ -10398,7 +10471,7 @@ export async function startServer({
       message,
       currentPrompt,
     );
-    const clientInstructionPrompt = [researchCommandContract, runContextPrompt, systemPrompt]
+    const clientInstructionPrompt = [mcpResearchBridgePrompt, researchCommandContract, runContextPrompt, systemPrompt]
       .map((part) => (typeof part === 'string' ? part.trim() : ''))
       .filter(Boolean)
       .join('\n\n---\n\n');

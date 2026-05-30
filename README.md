@@ -58,11 +58,13 @@ This fork adds local-file and local-LLM functionality:
   information, sample output, and success rate by task.
 - Web research tools: External MCP includes a Web research category with a
   Kindly Web Search preset for explicit web search/content retrieval. Local
-  models do not browse the internet by themselves; they use MCP/search tools
-  only when a run exposes those tools. Returned content is treated as
-  untrusted evidence, and the system prompt blocks external MCP web/content
-  tools from fetching localhost, private-network, link-local, or
-  metadata-service URLs unless the user explicitly provides the exact URL.
+  models do not browse the internet by themselves; when Research is enabled,
+  the daemon first tries an enabled web-research MCP server and injects cited
+  evidence into the prompt for runtimes that cannot call MCP tools directly.
+  Returned content is treated as untrusted evidence, and the system prompt
+  blocks external MCP web/content tools from fetching localhost,
+  private-network, link-local, or metadata-service URLs unless the user
+  explicitly provides the exact URL.
 - UI parity: Settings includes local model diagnostics/scan/test controls; the
   workspace includes a Design Sources panel.
 - CLI parity: `od model test` and `od sources` commands expose the same flows.

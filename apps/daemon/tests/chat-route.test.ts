@@ -26,6 +26,7 @@ import {
 } from '../src/server.js';
 import { skillCwdAliasSegment } from '../src/cwd-aliases.js';
 import { getAgentDef } from '../src/agents.js';
+import { writeMcpConfig } from '../src/mcp-config.js';
 import { readMemoryConfig, writeMemoryConfig } from '../src/memory.js';
 import { renderCodexImagegenOverride } from '../src/prompts/system.js';
 
@@ -257,6 +258,93 @@ process.stdin.on('end', () => {
         expect(body).not.toContain('missing-echo-guard');
       },
     );
+  });
+
+  it('injects daemon-side MCP web research evidence for research-enabled runs', async () => {
+    const started = await startServer({
+      port: 0,
+      returnServer: true,
+      mcpResearchBridgeResolver: async () => ({
+        server: {
+          id: 'kindly-web-search',
+          templateId: 'kindly-web-search',
+          transport: 'stdio',
+          enabled: true,
+          command: 'uvx',
+        },
+        findings: {
+          query: 'local llm web search',
+          summary: '[1] Local LLM web search: evidence',
+          provider: 'kindly-web-search',
+          depth: 'shallow',
+          fetchedAt: 1_700_000_000_000,
+          sources: [
+            {
+              title: 'Local LLM web search',
+              url: 'https://example.test/local-llm-web-search',
+              snippet: 'Daemon-side MCP search evidence.',
+              provider: 'kindly-web-search',
+            },
+          ],
+        },
+        prompt:
+          '## Web Research Evidence\n\n[1] Local LLM web search\nURL: https://example.test/local-llm-web-search',
+      }),
+    }) as { url: string; server: http.Server };
+    try {
+      await writeMcpConfig(process.env.OD_DATA_DIR!, {
+        servers: [
+          {
+            id: 'kindly-web-search',
+            templateId: 'kindly-web-search',
+            transport: 'stdio',
+            enabled: true,
+            command: 'uvx',
+          },
+        ],
+      });
+
+      await withFakeAgent(
+        'opencode',
+        `
+let prompt = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => {
+  prompt += chunk;
+});
+process.stdin.on('end', () => {
+  const checks = [
+    prompt.includes('## Web Research Evidence') ? 'has-mcp-research-evidence' : 'missing-mcp-research-evidence',
+    prompt.includes('https://example.test/local-llm-web-search') ? 'has-mcp-source-url' : 'missing-mcp-source-url',
+  ];
+  console.log(JSON.stringify({ type: 'text', part: { text: checks.join('\\n') } }));
+  process.exit(0);
+});
+`,
+        async () => {
+          const response = await fetch(`${started.url}/api/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId: 'opencode',
+              message: 'search current local LLM web search options',
+              research: { enabled: true, query: 'local llm web search' },
+            }),
+          });
+          const body = await response.text();
+
+          expect(response.ok).toBe(true);
+          expect(body).toContain('has-mcp-research-evidence');
+          expect(body).toContain('has-mcp-source-url');
+          expect(body).not.toContain('missing-mcp-research-evidence');
+          expect(body).toContain('"name":"web_search"');
+          expect(body).toContain('kindly-web-search');
+        },
+      );
+    } finally {
+      await writeMcpConfig(process.env.OD_DATA_DIR!, { servers: [] });
+      await new Promise<void>((resolve) => started.server.close(() => resolve()));
+    }
   });
 
   it('injects @-mention skillIds into the composed system prompt', async () => {
@@ -1563,7 +1651,8 @@ describe('chat prompt helpers', () => {
 
     expect(prompt).toContain('Canonical query for this run:');
     expect(prompt).toContain('EV market 2025 trends');
-    expect(prompt).toContain('the first tool action must be the research command');
+    expect(prompt).toContain('first use an enabled MCP web-search tool when one is available');
+    expect(prompt).toContain('If MCP web search is not available, use this research command');
   });
 
   it('resolves only the narrow Codex generated_images allowlist for known gpt-image image projects', () => {

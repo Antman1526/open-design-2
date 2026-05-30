@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  McpResearchBridgeError,
   renderMcpResearchBridgePrompt,
   resolveMcpResearchBridge,
   selectMcpWebResearchServer,
@@ -80,6 +81,50 @@ describe('MCP research bridge', () => {
       { serverId: 'kindly-web-search-searx-a', ok: false, error: 'searx one unavailable' },
       { serverId: 'kindly-web-search-searx-b', ok: true, sourceCount: 1 },
     ]);
+  });
+
+  it('throws attempts when all web research servers fail or return no sources', async () => {
+    const callTool = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('first instance rate limited'))
+      .mockResolvedValueOnce({
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({ results: [] }),
+          },
+        ],
+      });
+
+    await expect(
+      resolveMcpResearchBridge({
+        research: { enabled: true, query: 'failing search' },
+        message: 'ignored',
+        servers: [
+          {
+            id: 'kindly-web-search-searx-a',
+            templateId: 'kindly-web-search',
+            transport: 'stdio',
+            enabled: true,
+            command: 'uvx',
+          },
+          {
+            id: 'kindly-web-search-searx-b',
+            templateId: 'kindly-web-search',
+            transport: 'stdio',
+            enabled: true,
+            command: 'uvx',
+          },
+        ],
+        callTool,
+      }),
+    ).rejects.toMatchObject({
+      name: 'McpResearchBridgeError',
+      attempts: [
+        { serverId: 'kindly-web-search-searx-a', ok: false, error: 'first instance rate limited' },
+        { serverId: 'kindly-web-search-searx-b', ok: false, error: 'no sources returned' },
+      ],
+    });
   });
 
   it('runs a web_search call and renders untrusted cited evidence', async () => {

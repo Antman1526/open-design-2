@@ -156,6 +156,31 @@
 }
 .op-status-ok { border-color: var(--green-border); background: var(--green-bg); color: var(--green); }
 .op-status-error { border-color: var(--red-border); background: var(--red-bg); color: var(--red); }
+.op-web-attempts {
+  border-top: 1px solid var(--border);
+  padding: 8px 12px;
+  display: grid;
+  gap: 6px;
+}
+.op-web-error {
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+.op-web-attempt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.op-web-attempt code {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text);
+  background: var(--bg-subtle);
+  border-radius: 4px;
+  padding: 1px 6px;
+}
 .op-toggle {
   font-size: 10.5px;
   padding: 2px 8px;

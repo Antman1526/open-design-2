@@ -211,4 +211,35 @@ describe('ToolCard dispatch', () => {
     expect(errorSpy).toHaveBeenCalled();
     errorSpy.mockRestore();
   });
+
+  it('renders web search failure attempts from the tool result', () => {
+    const markup = renderToStaticMarkup(
+      <ToolCard
+        use={use(
+          {
+            query: 'local llm web search',
+            serverIds: ['kindly-web-search-searx-a', 'kindly-web-search-searx-b'],
+          },
+          'web_search',
+        )}
+        result={err(
+          JSON.stringify({
+            error: 'MCP web search failed: all MCP web-research servers failed',
+            attempts: [
+              { serverId: 'kindly-web-search-searx-a', ok: false, error: '429 Too Many Requests' },
+              { serverId: 'kindly-web-search-searx-b', ok: false, error: '403 Forbidden' },
+            ],
+          }),
+        )}
+        runStreaming={false}
+      />,
+    );
+
+    expect(markup).toContain('local llm web search');
+    expect(markup).toContain('2 servers');
+    expect(markup).toContain('429 Too Many Requests');
+    expect(markup).toContain('403 Forbidden');
+    expect(markup).toContain('kindly-web-search-searx-a');
+    expect(markup).toContain('op-status-error');
+  });
 });

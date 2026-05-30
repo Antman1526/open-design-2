@@ -100,7 +100,7 @@ export function ToolCard({
   if (name === 'Glob' || name === 'list_files') return <GlobCard input={use.input} result={result} runStreaming={isStreaming} runSucceeded={isSucceeded} />;
   if (name === 'Grep') return <GrepCard input={use.input} result={result} runStreaming={isStreaming} runSucceeded={isSucceeded} />;
   if (name === 'WebFetch' || name === 'web_fetch') return <WebFetchCard input={use.input} />;
-  if (name === 'WebSearch' || name === 'web_search') return <WebSearchCard input={use.input} />;
+  if (name === 'WebSearch' || name === 'web_search') return <WebSearchCard input={use.input} result={result} />;
   return <GenericCard name={name} input={use.input} result={result} runStreaming={isStreaming} runSucceeded={isSucceeded} />;
 }
 
@@ -652,18 +652,75 @@ function WebFetchCard({ input }: { input: unknown }) {
   );
 }
 
-function WebSearchCard({ input }: { input: unknown }) {
+function WebSearchCard({ input, result }: { input: unknown; result?: Props['result'] }) {
   const t = useT();
-  const obj = (input ?? {}) as { query?: string };
+  const obj = (input ?? {}) as { query?: string; serverIds?: string[] };
+  const parsed = parseWebSearchResult(result?.content);
+  const serverCount = Array.isArray(obj.serverIds) ? obj.serverIds.length : 0;
   return (
     <div className="op-card op-web">
       <div className="op-card-head">
         <span className="op-icon" aria-hidden>⌕</span>
         <span className="op-title">{t('tool.search')}</span>
         <code className="op-path">{obj.query ?? ''}</code>
+        {serverCount > 0 ? <span className="op-meta">{serverCount} servers</span> : null}
+        {result ? (
+          <span className={`op-status ${result.isError ? 'op-status-error' : 'op-status-ok'}`}>
+            {result.isError ? t('tool.error') : t('tool.done')}
+          </span>
+        ) : null}
       </div>
+      {parsed?.attempts.length ? (
+        <div className="op-web-attempts">
+          {parsed.error ? <div className="op-web-error">{parsed.error}</div> : null}
+          {parsed.attempts.map((attempt) => (
+            <div key={attempt.serverId} className="op-web-attempt">
+              <code>{attempt.serverId}</code>
+              <span className={`op-status ${attempt.ok ? 'op-status-ok' : 'op-status-error'}`}>
+                {attempt.ok ? t('tool.done') : t('tool.error')}
+              </span>
+              {attempt.error ? <span className="op-meta">{attempt.error}</span> : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
+}
+
+type WebSearchAttempt = {
+  serverId: string;
+  ok: boolean;
+  error?: string;
+};
+
+function parseWebSearchResult(content: string | undefined): { error?: string; attempts: WebSearchAttempt[] } | null {
+  if (!content) return null;
+  try {
+    const parsed = JSON.parse(content) as { error?: unknown; attempts?: unknown };
+    const attempts = Array.isArray(parsed.attempts)
+      ? parsed.attempts.flatMap((raw): WebSearchAttempt[] => {
+          if (!raw || typeof raw !== 'object') return [];
+          const item = raw as Record<string, unknown>;
+          const serverId = typeof item.serverId === 'string' ? item.serverId : '';
+          if (!serverId) return [];
+          return [
+            {
+              serverId,
+              ok: item.ok === true,
+              ...(typeof item.error === 'string' && item.error ? { error: item.error } : {}),
+            },
+          ];
+        })
+      : [];
+    if (attempts.length === 0) return null;
+    return {
+      ...(typeof parsed.error === 'string' && parsed.error ? { error: parsed.error } : {}),
+      attempts,
+    };
+  } catch {
+    return null;
+  }
 }
 
 function GenericCard({

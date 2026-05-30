@@ -27,6 +27,7 @@ import {
 import { skillCwdAliasSegment } from '../src/cwd-aliases.js';
 import { getAgentDef } from '../src/agents.js';
 import { writeMcpConfig } from '../src/mcp-config.js';
+import { McpResearchBridgeError } from '../src/research/mcp-bridge.js';
 import { readMemoryConfig, writeMemoryConfig } from '../src/memory.js';
 import { renderCodexImagegenOverride } from '../src/prompts/system.js';
 
@@ -342,6 +343,69 @@ process.stdin.on('end', () => {
           expect(body).not.toContain('missing-mcp-research-evidence');
           expect(body).toContain('"name":"web_search"');
           expect(body).toContain('kindly-web-search');
+        },
+      );
+    } finally {
+      await writeMcpConfig(process.env.OD_DATA_DIR!, { servers: [] });
+      await new Promise<void>((resolve) => started.server.close(() => resolve()));
+    }
+  });
+
+  it('surfaces MCP web research failure attempts before falling back', async () => {
+    const started = await startServer({
+      port: 0,
+      returnServer: true,
+      mcpResearchBridgeResolver: async () => {
+        throw new McpResearchBridgeError('all MCP web-research servers failed', [
+          { serverId: 'kindly-web-search-searx-a', ok: false, error: '429 Too Many Requests' },
+          { serverId: 'kindly-web-search-searx-b', ok: false, error: '403 Forbidden' },
+        ]);
+      },
+    }) as { url: string; server: http.Server };
+    try {
+      await writeMcpConfig(process.env.OD_DATA_DIR!, {
+        servers: [
+          {
+            id: 'kindly-web-search-searx-a',
+            templateId: 'kindly-web-search',
+            transport: 'stdio',
+            enabled: true,
+            command: 'uvx',
+          },
+          {
+            id: 'kindly-web-search-searx-b',
+            templateId: 'kindly-web-search',
+            transport: 'stdio',
+            enabled: true,
+            command: 'uvx',
+          },
+        ],
+      });
+
+      await withFakeAgent(
+        'opencode',
+        `
+console.log(JSON.stringify({ type: 'text', part: { text: 'agent still ran' } }));
+process.exit(0);
+`,
+        async () => {
+          const response = await fetch(`${started.url}/api/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId: 'opencode',
+              message: 'search current local LLM web search options',
+              research: { enabled: true, query: 'local llm web search' },
+            }),
+          });
+          const body = await response.text();
+
+          expect(response.ok).toBe(true);
+          expect(body).toContain('agent still ran');
+          expect(body).toContain('429 Too Many Requests');
+          expect(body).toContain('403 Forbidden');
+          expect(body).toContain('kindly-web-search-searx-a');
+          expect(body).toContain('kindly-web-search-searx-b');
         },
       );
     } finally {

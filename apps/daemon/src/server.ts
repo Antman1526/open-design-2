@@ -240,6 +240,7 @@ import { generateMedia } from './media.js';
 import { listElevenLabsVoiceOptions } from './elevenlabs-voices.js';
 import { searchResearch, ResearchError } from './research/index.js';
 import {
+  McpResearchBridgeError,
   resolveMcpResearchBridge,
   selectMcpWebResearchServers,
 } from './research/mcp-bridge.js';
@@ -10460,7 +10461,10 @@ export async function startServer({
           type: 'tool_result',
           toolUseId,
           isError: true,
-          content: `MCP web search failed: ${err && err.message ? err.message : String(err)}`,
+          content: JSON.stringify({
+            error: `MCP web search failed: ${err && err.message ? err.message : String(err)}`,
+            attempts: err instanceof McpResearchBridgeError ? err.attempts : [],
+          }),
         });
       }
     }

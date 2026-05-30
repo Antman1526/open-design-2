@@ -31,6 +31,16 @@ export interface McpResearchBridgeAttempt {
   error?: string;
 }
 
+export class McpResearchBridgeError extends Error {
+  constructor(
+    message: string,
+    public readonly attempts: McpResearchBridgeAttempt[],
+  ) {
+    super(message);
+    this.name = 'McpResearchBridgeError';
+  }
+}
+
 export type McpToolCaller = (
   server: McpServerConfig,
   toolName: string,
@@ -112,7 +122,7 @@ export async function resolveMcpResearchBridge(
     }
   }
 
-  return null;
+  throw new McpResearchBridgeError('all MCP web-research servers failed', attempts);
 }
 
 export function renderMcpResearchBridgePrompt(findings: ResearchFindings): string {

@@ -664,8 +664,13 @@ describe('MCP_TEMPLATES', () => {
     expect(fields.has('SERPER_API_KEY')).toBe(true);
     expect(fields.has('TAVILY_API_KEY')).toBe(true);
     expect(fields.has('SEARXNG_BASE_URL')).toBe(true);
+    expect(fields.has('SEARXNG_TIMEOUT_SECONDS')).toBe(true);
+    expect(fields.has('SEARXNG_USER_AGENT')).toBe(true);
+    expect(fields.has('SEARXNG_HEADERS_JSON')).toBe(true);
     expect(fields.has('GITHUB_TOKEN')).toBe(true);
     expect(fields.has('KINDLY_BROWSER_EXECUTABLE_PATH')).toBe(true);
+    expect(fields.has('KINDLY_TOOL_TOTAL_TIMEOUT_SECONDS')).toBe(true);
+    expect(fields.has('KINDLY_WEB_SEARCH_MAX_CONCURRENCY')).toBe(true);
   });
 
   it('includes the Pollinations stdio template with optional API key', () => {

@@ -1178,6 +1178,22 @@ export const MCP_TEMPLATES: McpTemplate[] = [
         placeholder: 'https://searx.example.org',
       },
       {
+        key: 'SEARXNG_TIMEOUT_SECONDS',
+        label: 'SearXNG timeout seconds (optional)',
+        placeholder: '20',
+      },
+      {
+        key: 'SEARXNG_USER_AGENT',
+        label: 'SearXNG user agent (optional)',
+        placeholder: 'OpenDesign/0.8 (+local)',
+      },
+      {
+        key: 'SEARXNG_HEADERS_JSON',
+        label: 'SearXNG headers JSON (optional)',
+        placeholder: '{"Authorization":"Bearer ..."}',
+        secret: true,
+      },
+      {
         key: 'GITHUB_TOKEN',
         label: 'GitHub token (optional)',
         placeholder: 'ghp_... or github_pat_...',
@@ -1187,6 +1203,16 @@ export const MCP_TEMPLATES: McpTemplate[] = [
         key: 'KINDLY_BROWSER_EXECUTABLE_PATH',
         label: 'Browser executable path (optional)',
         placeholder: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+      },
+      {
+        key: 'KINDLY_TOOL_TOTAL_TIMEOUT_SECONDS',
+        label: 'Total tool timeout seconds (optional)',
+        placeholder: '45',
+      },
+      {
+        key: 'KINDLY_WEB_SEARCH_MAX_CONCURRENCY',
+        label: 'Web search concurrency (optional)',
+        placeholder: '1',
       },
     ],
   },

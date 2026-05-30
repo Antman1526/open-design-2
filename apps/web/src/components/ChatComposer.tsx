@@ -604,7 +604,9 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         prompt: [
           `Search for: ${query}`,
           '',
-          'Before answering, your first tool action must be the OD research command for your shell.',
+          'Before answering, first use an enabled MCP web-search tool when one is available.',
+          'For Kindly Web Search, call web_search with the canonical query. Use get_content only for sources that look relevant enough to inspect in detail.',
+          'If MCP web search is not available, use the OD research command for your shell.',
           'POSIX: "$OD_NODE_BIN" "$OD_BIN" research search --query "<search query>" --max-sources 5',
           'PowerShell: & $env:OD_NODE_BIN $env:OD_BIN research search --query "<search query>" --max-sources 5',
           'cmd.exe: "%OD_NODE_BIN%" "%OD_BIN%" research search --query "<search query>" --max-sources 5',

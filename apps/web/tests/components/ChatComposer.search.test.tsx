@@ -405,8 +405,12 @@ describe('ChatComposer /search command', () => {
     expect(onSend).toHaveBeenCalledTimes(1);
     const [prompt, attachments, commentAttachments, meta] = onSend.mock.calls[0]!;
     expect(prompt).toContain(
-      'Before answering, your first tool action must be the OD research command for your shell.',
+      'Before answering, first use an enabled MCP web-search tool when one is available.',
     );
+    expect(prompt).toContain(
+      'For Kindly Web Search, call web_search with the canonical query.',
+    );
+    expect(prompt).toContain('If MCP web search is not available, use the OD research command');
     expect(prompt).toContain(
       'POSIX: "$OD_NODE_BIN" "$OD_BIN" research search --query "<search query>" --max-sources 5',
     );

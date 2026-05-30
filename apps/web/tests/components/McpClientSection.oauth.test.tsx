@@ -29,6 +29,11 @@ const kindlyTemplate = {
     { key: 'SERPER_API_KEY', label: 'Serper API key', secret: true },
     { key: 'TAVILY_API_KEY', label: 'Tavily API key', secret: true },
     { key: 'SEARXNG_BASE_URL', label: 'SearXNG base URL' },
+    { key: 'SEARXNG_TIMEOUT_SECONDS', label: 'SearXNG timeout seconds' },
+    { key: 'SEARXNG_USER_AGENT', label: 'SearXNG user agent' },
+    { key: 'SEARXNG_HEADERS_JSON', label: 'SearXNG headers JSON' },
+    { key: 'KINDLY_TOOL_TOTAL_TIMEOUT_SECONDS', label: 'Tool timeout seconds' },
+    { key: 'KINDLY_WEB_SEARCH_MAX_CONCURRENCY', label: 'Search concurrency' },
   ],
 } as const;
 
@@ -119,5 +124,7 @@ describe('McpClientSection OAuth controls', () => {
     expect(screen.getByText(/SERPER_API_KEY=/)).toBeTruthy();
     expect(screen.getByText(/TAVILY_API_KEY=/)).toBeTruthy();
     expect(screen.getByText(/SEARXNG_BASE_URL=/)).toBeTruthy();
+    expect(screen.getByText(/SEARXNG_TIMEOUT_SECONDS=/)).toBeTruthy();
+    expect(screen.getByText(/KINDLY_TOOL_TOTAL_TIMEOUT_SECONDS=/)).toBeTruthy();
   });
 });

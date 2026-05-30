@@ -521,6 +521,33 @@ export function listLocalModelScorecards(db: SqliteDb): LocalModelScorecard[] {
   return rows.map((row) => LocalModelScorecardSchema.parse(row));
 }
 
+export function localModelAgentModelOptions(
+  db: SqliteDb,
+  task: LocalModelTask = 'design',
+): Array<{ id: string; label: string }> {
+  const scorecards = listLocalModelScorecards(db);
+  const byModelTask = new Map(
+    scorecards.map((scorecard) => [`${scorecard.modelId}:${scorecard.task}`, scorecard]),
+  );
+  return listLocalModels(db)
+    .filter((model) => model.enabled && model.available)
+    .filter((model) => !model.roles.every((role) => role === 'embedding'))
+    .map((model) => {
+      const scorecard = byModelTask.get(`${model.id}:${task}`) ?? null;
+      const roleScore = model.roles.includes(taskRole(task)) ? 1 : 0;
+      const observed = scorecard?.overallSuccess ?? (model.roles.length > 0 ? 0.35 : 0);
+      return { model, scorecard, rank: roleScore + observed };
+    })
+    .sort((a, b) => b.rank - a.rank || a.model.name.localeCompare(b.model.name))
+    .map(({ model, scorecard }) => {
+      const success = scorecard ? ` · ${Math.round(scorecard.overallSuccess * 100)}% success` : '';
+      return {
+        id: model.id,
+        label: `Local · ${model.name}${success}`,
+      };
+    });
+}
+
 export function routeLocalModel(db: SqliteDb, task: LocalModelTask): LocalModelRouteResponse {
   const enabled = listLocalModels(db).filter((model) => model.enabled && model.available);
   if (enabled.length === 0) {

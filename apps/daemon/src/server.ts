@@ -394,6 +394,7 @@ import {
   DEFAULT_LOCAL_MODEL_ROOT,
   isLocalModelSpecifier,
   listLocalModels,
+  localModelAgentModelOptions,
   resolveLocalModelForSpecifier,
   scanAndPersistLocalModels,
 } from './local-models.js';
@@ -5723,7 +5724,20 @@ export async function startServer({
     try {
       const config = await readAppConfig(RUNTIME_DATA_DIR);
       const list = await detectAgents(config.agentCliEnv ?? {});
-      res.json({ agents: list });
+      const localModelOptions = localModelAgentModelOptions(db, 'design');
+      const agents = localModelOptions.length > 0
+        ? list.map((agent) => {
+            if (!agent.available) return agent;
+            const existing = new Set((agent.models ?? []).map((model) => model.id));
+            const appended = localModelOptions.filter((model) => !existing.has(model.id));
+            if (appended.length === 0) return agent;
+            return {
+              ...agent,
+              models: [...(agent.models ?? []), ...appended],
+            };
+          })
+        : list;
+      res.json({ agents });
     } catch (err) {
       res.status(500).json({ error: String(err) });
     }

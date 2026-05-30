@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   __forTestNormalizeLocalDesignOutput,
   computeRollingScorecard,
+  localModelAgentModelOptions,
   __localModelCandidateNames,
   __localModelServerPorts,
   diagnoseLocalModelSetup,
@@ -247,6 +248,68 @@ describe('local model persistence', () => {
 });
 
 describe('local model chat selection', () => {
+  it('surfaces enabled non-embedding GGUF models as agent model options', () => {
+    const db = new Database(':memory:');
+    try {
+      migrateLocalModels(db);
+      upsertLocalModels(db, [
+        {
+          id: 'lm_qwen3_6_27b_q4_k_m_gguf_abcdef123456',
+          name: 'Qwen3.6-27B-Q4_K_M',
+          fileName: 'Qwen3.6-27B-Q4_K_M.gguf',
+          path: '/models/GGUF/Qwen3.6-27B-Q4_K_M.gguf',
+          sizeBytes: 1,
+          mtimeMs: 1,
+          digest: 'abcdef123456',
+          roles: ['design'],
+          enabled: true,
+          available: true,
+          discoveredAt: 1,
+          lastSeenAt: 1,
+          missingSince: null,
+          updatedAt: 1,
+        },
+        {
+          id: 'lm_nomic_embed_text_v1_5_f16_gguf_feed12345678',
+          name: 'nomic-embed-text-v1.5.f16',
+          fileName: 'nomic-embed-text-v1.5.f16.gguf',
+          path: '/models/GGUF/nomic-embed-text-v1.5.f16.gguf',
+          sizeBytes: 1,
+          mtimeMs: 1,
+          digest: 'feed12345678',
+          roles: ['embedding'],
+          enabled: true,
+          available: true,
+          discoveredAt: 1,
+          lastSeenAt: 1,
+          missingSince: null,
+          updatedAt: 1,
+        },
+      ]);
+      recordLocalModelAttempt(db, {
+        modelId: 'lm_qwen3_6_27b_q4_k_m_gguf_abcdef123456',
+        task: 'design',
+        latencyMs: 100,
+        completed: true,
+        designPassed: true,
+        userMarkedSuccess: false,
+        timedOut: false,
+        crashed: false,
+        serverMode: 'llama-server',
+        sample: '<artifact></artifact>',
+      });
+
+      expect(localModelAgentModelOptions(db, 'design')).toEqual([
+        {
+          id: 'lm_qwen3_6_27b_q4_k_m_gguf_abcdef123456',
+          label: 'Local · Qwen3.6-27B-Q4_K_M · 80% success',
+        },
+      ]);
+    } finally {
+      db.close();
+    }
+  });
+
   it('resolves custom:ai model labels to scanned GGUF models', () => {
     const db = new Database(':memory:');
     try {

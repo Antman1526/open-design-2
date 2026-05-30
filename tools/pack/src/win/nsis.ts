@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { appendFile, cp, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 
@@ -114,6 +115,7 @@ async function findNsisLanguageDirectories(root: string, depth = 4): Promise<str
 export async function ensureNsisPersianLanguageAlias(config: ToolPackConfig): Promise<boolean> {
   const cacheRoots = [
     process.env.ELECTRON_BUILDER_CACHE,
+    process.platform === "darwin" ? join(homedir(), "Library", "Caches", "electron-builder") : undefined,
     process.env.LOCALAPPDATA == null ? undefined : join(process.env.LOCALAPPDATA, "electron-builder", "Cache"),
     process.env.APPDATA == null ? undefined : join(process.env.APPDATA, "electron-builder", "Cache"),
     join(config.workspaceRoot, "node_modules", ".cache", "electron-builder"),

@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { mkdir, rm, stat, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 
@@ -23,6 +24,16 @@ const NSIS_LANGUAGES = [
   { macro: "LANG_RUSSIAN", name: "Russian" },
   { macro: "LANG_PERSIAN", name: "Persian" },
 ] as const;
+
+type CommandInvocation = {
+  argsPrefix?: string[];
+  command: string;
+  env?: NodeJS.ProcessEnv;
+};
+
+type MakensisInvocation = CommandInvocation & {
+  definePrefix: "/" | "-";
+};
 
 function escapeNsisString(value: string): string {
   return value.replace(/\$/g, "$$").replace(/"/g, '$\\"').replace(/\r?\n/g, "$\\r$\\n");
@@ -55,23 +66,50 @@ async function findFirstExistingPath(candidates: string[]): Promise<string | nul
 async function findElectronBuilderMakensis(config: ToolPackConfig): Promise<string | null> {
   const cacheRoots = [
     process.env.ELECTRON_BUILDER_CACHE,
+    process.platform === "darwin" ? join(homedir(), "Library", "Caches", "electron-builder") : undefined,
     process.env.LOCALAPPDATA == null ? undefined : join(process.env.LOCALAPPDATA, "electron-builder", "Cache"),
     process.env.APPDATA == null ? undefined : join(process.env.APPDATA, "electron-builder", "Cache"),
     join(config.workspaceRoot, "node_modules", ".cache", "electron-builder"),
   ].filter((entry): entry is string => entry != null && entry.length > 0);
   for (const cacheRoot of cacheRoots) {
     const direct = await findFirstExistingPath([
+      process.platform === "darwin"
+        ? join(cacheRoot, "nsis", "nsis-3.0.4.1-nsis-3.0.4.1", "mac", "makensis")
+        : "",
+      process.platform === "linux"
+        ? join(cacheRoot, "nsis", "nsis-3.0.4.1-nsis-3.0.4.1", "linux", "makensis")
+        : "",
       join(cacheRoot, "nsis", "nsis-3.0.4.1-nsis-3.0.4.1", "makensis.exe"),
       join(cacheRoot, "nsis", "nsis-3.0.4.1-nsis-3.0.4.1", "Bin", "makensis.exe"),
-    ]);
+    ].filter((entry) => entry.length > 0));
     if (direct != null) return direct;
   }
   return null;
 }
 
-async function resolveMakensisCommand(config: ToolPackConfig): Promise<string> {
+function resolveNsisRoot(makensisCommand: string): string | null {
+  if (makensisCommand.endsWith(join("mac", "makensis")) || makensisCommand.endsWith(join("linux", "makensis"))) {
+    return dirname(dirname(makensisCommand));
+  }
+  if (makensisCommand.endsWith(join("Bin", "makensis.exe"))) {
+    return dirname(dirname(makensisCommand));
+  }
+  if (makensisCommand.endsWith("makensis.exe")) {
+    return dirname(makensisCommand);
+  }
+  return null;
+}
+
+async function resolveMakensisCommand(config: ToolPackConfig): Promise<MakensisInvocation> {
   const cached = await findElectronBuilderMakensis(config);
-  if (cached != null) return cached;
+  if (cached != null) {
+    const nsisRoot = resolveNsisRoot(cached);
+    return {
+      command: cached,
+      definePrefix: process.platform === "win32" ? "/" : "-",
+      env: nsisRoot == null ? undefined : { ...process.env, NSISDIR: nsisRoot },
+    };
+  }
   const candidates = [
     "makensis.exe",
     "makensis",
@@ -81,12 +119,45 @@ async function resolveMakensisCommand(config: ToolPackConfig): Promise<string> {
   for (const candidate of candidates) {
     try {
       await execFileAsync(candidate, ["/VERSION"], { windowsHide: true });
-      return candidate;
+      return { command: candidate, definePrefix: process.platform === "win32" ? "/" : "-" };
     } catch {
       // Keep probing known locations.
     }
   }
   throw new Error("makensis is required to build the Windows installer; install NSIS or populate the electron-builder NSIS cache");
+}
+
+async function findElectronBuilderWine64(config: ToolPackConfig): Promise<string | null> {
+  const cacheRoots = [
+    process.env.ELECTRON_BUILDER_CACHE,
+    process.platform === "darwin" ? join(homedir(), "Library", "Caches", "electron-builder") : undefined,
+    join(config.workspaceRoot, "node_modules", ".cache", "electron-builder"),
+  ].filter((entry): entry is string => entry != null && entry.length > 0);
+  for (const cacheRoot of cacheRoots) {
+    const direct = await findFirstExistingPath([
+      join(cacheRoot, "wine", "wine-4.0.1-mac", "bin", "wine64"),
+      join(cacheRoot, "wine", "wine-4.0.1-mac", "bin", "wine"),
+    ]);
+    if (direct != null) return direct;
+  }
+  return null;
+}
+
+async function resolveSevenZipCommand(config: ToolPackConfig): Promise<CommandInvocation> {
+  if (process.platform === "win32") return { command: winResources.sevenZipExe };
+
+  const wineCommand = await findElectronBuilderWine64(config);
+  if (wineCommand == null) {
+    throw new Error("Wine is required to build the Windows installer payload on this host; populate the electron-builder Wine cache or build on Windows");
+  }
+  return {
+    argsPrefix: [winResources.sevenZipExe],
+    command: wineCommand,
+    env: {
+      ...process.env,
+      WINEPREFIX: join(dirname(dirname(wineCommand)), "wine-home"),
+    },
+  };
 }
 
 function createRunningInstancesScript(): string {
@@ -173,7 +244,12 @@ async function writeInstallerScript(config: ToolPackConfig, paths: WinPaths): Pr
   const appPathsKey = escapeNsisString(identity.appPathsKey);
   const namespace = escapeNsisString(config.namespace);
   const localDataRoot = `$APPDATA\\${escapeNsisString(PRODUCT_NAME)}\\namespaces\\${escapeNsisString(sanitizeNamespace(config.namespace))}`;
-  const nsisLogPath = escapeNsisString(paths.nsisLogPath);
+  const nsisLogDir = process.platform === "win32"
+    ? escapeNsisString(dirname(paths.nsisLogPath))
+    : "$TEMP\\OpenDesign";
+  const nsisLogPath = process.platform === "win32"
+    ? escapeNsisString(paths.nsisLogPath)
+    : "$TEMP\\OpenDesign\\nsis.log";
   const runningInstancesScriptPath = join(dirname(paths.installerScriptPath), "running-instances.ps1");
 
   await mkdir(dirname(paths.installerScriptPath), { recursive: true });
@@ -279,7 +355,7 @@ Var LX
 Function LogInstallerEvent
   Exch $0
   Push $1
-  CreateDirectory "${escapeNsisString(dirname(paths.nsisLogPath))}"
+  CreateDirectory "${nsisLogDir}"
   FileOpen $1 "${nsisLogPath}" a
   IfErrors done
   FileSeek $1 0 END
@@ -306,7 +382,7 @@ FunctionEnd
 Function un.LogInstallerEvent
   Exch $0
   Push $1
-  CreateDirectory "${escapeNsisString(dirname(paths.nsisLogPath))}"
+  CreateDirectory "${nsisLogDir}"
   FileOpen $1 "${nsisLogPath}" a
   IfErrors done
   FileSeek $1 0 END
@@ -707,8 +783,8 @@ export async function buildCustomWinNsisInstaller(
   paths: WinPaths,
   builtApp: WinBuiltAppManifest,
 ): Promise<void> {
-  if (process.platform !== "win32") throw new Error("Windows installer build must run on Windows");
   const makensisCommand = await resolveMakensisCommand(config);
+  const sevenZipCommand = await resolveSevenZipCommand(config);
   const packagedVersion = await readPackagedVersion(config);
   await ensureNsisPersianLanguageAlias(config);
 
@@ -716,24 +792,34 @@ export async function buildCustomWinNsisInstaller(
   await mkdir(dirname(paths.setupPath), { recursive: true });
   await rm(paths.installerPayloadPath, { force: true });
   await rm(paths.setupPath, { force: true });
-  await execFileAsync(winResources.sevenZipExe, ["a", "-t7z", "-mx=1", "-ms=off", paths.installerPayloadPath, ".\\*"], {
+  await execFileAsync(sevenZipCommand.command, [
+    ...(sevenZipCommand.argsPrefix ?? []),
+    "a",
+    "-t7z",
+    "-mx=1",
+    "-ms=off",
+    paths.installerPayloadPath,
+    process.platform === "win32" ? ".\\*" : "./*",
+  ], {
     cwd: builtApp.unpackedRoot,
+    env: sevenZipCommand.env,
     windowsHide: true,
   });
   await stat(paths.installerPayloadPath);
   await writeInstallerScript(config, paths);
-  await execFileAsync(makensisCommand, [
-    "/V2",
-    `/DAPP_VERSION=${packagedVersion}`,
-    `/DOUTPUT_EXE=${paths.setupPath}`,
-    `/DPAYLOAD_7Z=${paths.installerPayloadPath}`,
-    `/DSEVEN_Z_EXE=${winResources.sevenZipExe}`,
-    `/DSEVEN_Z_DLL=${winResources.sevenZipDll}`,
-    `/DAPP_ICON=${paths.winIconPath}`,
-    `/DRUNNING_INSTANCES_PS1=${join(dirname(paths.installerScriptPath), "running-instances.ps1")}`,
+  await execFileAsync(makensisCommand.command, [
+    `${makensisCommand.definePrefix}V2`,
+    `${makensisCommand.definePrefix}DAPP_VERSION=${packagedVersion}`,
+    `${makensisCommand.definePrefix}DOUTPUT_EXE=${paths.setupPath}`,
+    `${makensisCommand.definePrefix}DPAYLOAD_7Z=${paths.installerPayloadPath}`,
+    `${makensisCommand.definePrefix}DSEVEN_Z_EXE=${winResources.sevenZipExe}`,
+    `${makensisCommand.definePrefix}DSEVEN_Z_DLL=${winResources.sevenZipDll}`,
+    `${makensisCommand.definePrefix}DAPP_ICON=${paths.winIconPath}`,
+    `${makensisCommand.definePrefix}DRUNNING_INSTANCES_PS1=${join(dirname(paths.installerScriptPath), "running-instances.ps1")}`,
     paths.installerScriptPath,
   ], {
     cwd: dirname(paths.installerScriptPath),
+    env: makensisCommand.env,
     windowsHide: true,
   });
   await stat(paths.setupPath);

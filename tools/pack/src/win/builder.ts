@@ -101,7 +101,8 @@ async function runElectronBuilderRaw(config: ToolPackConfig, paths: WinPaths, pr
     buildDependenciesFromSource: ELECTRON_BUILDER_BUILD_DEPENDENCIES_FROM_SOURCE,
     compression: "maximum",
     directories: { output: paths.appBuilderOutputRoot },
-    electronDist: config.electronDistPath,
+    // Do not pass electronDist here. The installed electron package is host-specific
+    // on macOS, so cross-building Windows must let electron-builder resolve win32 Electron.
     electronVersion: config.electronVersion,
     executableName: PRODUCT_NAME,
     extraMetadata: {
@@ -279,7 +280,7 @@ export async function runElectronBuilder(
     portable: config.portable,
     platform: "win32",
     resourceTreeKey: resourceTree.key,
-    schemaVersion: 5,
+    schemaVersion: 6,
     target: "dir",
     webOutputMode: config.webOutputMode,
     winIcon: await hashPath(winResources.icon),

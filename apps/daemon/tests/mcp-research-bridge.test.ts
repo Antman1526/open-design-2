@@ -25,6 +25,24 @@ describe('MCP research bridge', () => {
     expect(selectMcpWebResearchServer(servers)?.id).toBe('kindly-web-search');
   });
 
+  it('selects private SearXNG template rows even when the server id is customized', () => {
+    const servers = selectMcpWebResearchServers([
+      {
+        id: 'my-private-search',
+        label: 'Private search',
+        templateId: 'kindly-web-search-private-searxng',
+        transport: 'stdio',
+        enabled: true,
+        command: 'uvx',
+      },
+    ]);
+
+    expect(servers.map((server) => server.id)).toEqual(['my-private-search']);
+    expect(selectMcpWebResearchServer(servers)?.templateId).toBe(
+      'kindly-web-search-private-searxng',
+    );
+  });
+
   it('falls back to the next enabled web research server when one fails', async () => {
     const callTool = vi
       .fn()

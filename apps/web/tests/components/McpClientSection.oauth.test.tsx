@@ -37,6 +37,24 @@ const kindlyTemplate = {
   ],
 } as const;
 
+const privateSearxngTemplate = {
+  ...kindlyTemplate,
+  id: 'kindly-web-search-private-searxng',
+  label: 'Kindly Web Search - Private SearXNG',
+  description: 'Use the private localhost SearXNG instance for Open Design web research.',
+  envFields: [
+    { key: 'SEARXNG_BASE_URL', label: 'SearXNG base URL', defaultValue: 'http://127.0.0.1:8889/' },
+    { key: 'SEARXNG_TIMEOUT_SECONDS', label: 'SearXNG timeout seconds', defaultValue: '20' },
+    {
+      key: 'SEARXNG_USER_AGENT',
+      label: 'SearXNG user agent',
+      defaultValue: 'OpenDesign/0.8 (+local; private)',
+    },
+    { key: 'KINDLY_TOOL_TOTAL_TIMEOUT_SECONDS', label: 'Tool timeout seconds', defaultValue: '45' },
+    { key: 'KINDLY_WEB_SEARCH_MAX_CONCURRENCY', label: 'Search concurrency', defaultValue: '1' },
+  ],
+} as const;
+
 describe('McpClientSection OAuth controls', () => {
   beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
@@ -53,7 +71,7 @@ describe('McpClientSection OAuth controls', () => {
               url: 'http://localhost:38451/mcp',
             },
           ],
-          templates: [kindlyTemplate],
+          templates: [privateSearxngTemplate, kindlyTemplate],
         });
       }
       if (url.startsWith('/api/mcp/oauth/status')) {
@@ -116,7 +134,7 @@ describe('McpClientSection OAuth controls', () => {
     expect(webResearchTitle).toBeTruthy();
     expect((webResearchTitle.closest('details') as HTMLDetailsElement | null)?.open).toBe(true);
     expect(screen.getByText(/Search and retrieve current external sources/i)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /Kindly Web Search/i }));
+    fireEvent.click(screen.getByText('Kindly Web Search').closest('button')!);
 
     expect(await screen.findByRole('button', { name: /Kindly Web Search/i })).toBeTruthy();
     fireEvent.click(screen.getAllByRole('button', { name: /Expand this MCP server/i }).at(-1)!);
@@ -126,5 +144,19 @@ describe('McpClientSection OAuth controls', () => {
     expect(screen.getByText(/SEARXNG_BASE_URL=/)).toBeTruthy();
     expect(screen.getByText(/SEARXNG_TIMEOUT_SECONDS=/)).toBeTruthy();
     expect(screen.getByText(/KINDLY_TOOL_TOTAL_TIMEOUT_SECONDS=/)).toBeTruthy();
+  });
+
+  it('pre-fills private SearXNG defaults when adding the local web-search template', async () => {
+    render(<McpClientSection />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /Add server/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Kindly Web Search - Private SearXNG/i }));
+
+    fireEvent.click(screen.getAllByRole('button', { name: /Expand this MCP server/i }).at(-1)!);
+    expect(screen.getByDisplayValue(/SEARXNG_BASE_URL=http:\/\/127\.0\.0\.1:8889\//)).toBeTruthy();
+    expect(screen.getByDisplayValue(/SEARXNG_TIMEOUT_SECONDS=20/)).toBeTruthy();
+    expect(screen.getByDisplayValue(/SEARXNG_USER_AGENT=OpenDesign\/0\.8 \(\+local; private\)/)).toBeTruthy();
+    expect(screen.getByDisplayValue(/KINDLY_TOOL_TOTAL_TIMEOUT_SECONDS=45/)).toBeTruthy();
+    expect(screen.getByDisplayValue(/KINDLY_WEB_SEARCH_MAX_CONCURRENCY=1/)).toBeTruthy();
   });
 });

@@ -52,6 +52,7 @@ export interface McpTemplateField {
   label?: string;
   required?: boolean;
   placeholder?: string;
+  defaultValue?: string;
   secret?: boolean;
 }
 
@@ -491,6 +492,14 @@ export function buildOpenCodeMcpConfigContent(
 // Picking one fills the form with defaults; the resulting McpServerConfig
 // flows through the same persistence path as a fully-custom entry.
 // ───────────────────────────────────────────────────────────────────────
+
+const KINDLY_WEB_SEARCH_COMMAND = 'uvx';
+const KINDLY_WEB_SEARCH_ARGS = [
+  '--from',
+  'git+https://github.com/Shelpuk-AI-Technology-Consulting/kindly-web-search-mcp-server',
+  'kindly-web-search-mcp-server',
+  'start-mcp-server',
+];
 
 export const MCP_TEMPLATES: McpTemplate[] = [
   // ── image-generation ────────────────────────────────────────────────
@@ -1143,6 +1152,68 @@ export const MCP_TEMPLATES: McpTemplate[] = [
     ],
   },
   {
+    id: 'kindly-web-search-private-searxng',
+    label: 'Kindly Web Search - Private SearXNG',
+    description:
+      'Web research through a private localhost SearXNG instance on 127.0.0.1:8889. Use this when Open Design is configured with the bundled deploy/searxng-private Docker setup so local LLM runs do not depend on public SearXNG rate limits.',
+    transport: 'stdio',
+    category: 'web-research',
+    homepage: 'https://github.com/Shelpuk-AI-Technology-Consulting/kindly-web-search-mcp-server',
+    example:
+      'Search current sources for local LLM web-search MCP setup and cite the URLs used.',
+    command: KINDLY_WEB_SEARCH_COMMAND,
+    args: KINDLY_WEB_SEARCH_ARGS,
+    envFields: [
+      {
+        key: 'SEARXNG_BASE_URL',
+        label: 'SearXNG base URL',
+        placeholder: 'http://127.0.0.1:8889/',
+        defaultValue: 'http://127.0.0.1:8889/',
+      },
+      {
+        key: 'SEARXNG_TIMEOUT_SECONDS',
+        label: 'SearXNG timeout seconds',
+        placeholder: '20',
+        defaultValue: '20',
+      },
+      {
+        key: 'SEARXNG_USER_AGENT',
+        label: 'SearXNG user agent',
+        placeholder: 'OpenDesign/0.8 (+local; private)',
+        defaultValue: 'OpenDesign/0.8 (+local; private)',
+      },
+      {
+        key: 'SEARXNG_HEADERS_JSON',
+        label: 'SearXNG headers JSON (optional)',
+        placeholder: '{"Authorization":"Bearer ..."}',
+        secret: true,
+      },
+      {
+        key: 'GITHUB_TOKEN',
+        label: 'GitHub token (optional)',
+        placeholder: 'ghp_... or github_pat_...',
+        secret: true,
+      },
+      {
+        key: 'KINDLY_BROWSER_EXECUTABLE_PATH',
+        label: 'Browser executable path (optional)',
+        placeholder: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+      },
+      {
+        key: 'KINDLY_TOOL_TOTAL_TIMEOUT_SECONDS',
+        label: 'Total tool timeout seconds',
+        placeholder: '45',
+        defaultValue: '45',
+      },
+      {
+        key: 'KINDLY_WEB_SEARCH_MAX_CONCURRENCY',
+        label: 'Web search concurrency',
+        placeholder: '1',
+        defaultValue: '1',
+      },
+    ],
+  },
+  {
     id: 'kindly-web-search',
     label: 'Kindly Web Search',
     description:
@@ -1152,13 +1223,8 @@ export const MCP_TEMPLATES: McpTemplate[] = [
     homepage: 'https://github.com/Shelpuk-AI-Technology-Consulting/kindly-web-search-mcp-server',
     example:
       'Search for current documentation on CSS anchor positioning and summarize the browser support with citations.',
-    command: 'uvx',
-    args: [
-      '--from',
-      'git+https://github.com/Shelpuk-AI-Technology-Consulting/kindly-web-search-mcp-server',
-      'kindly-web-search-mcp-server',
-      'start-mcp-server',
-    ],
+    command: KINDLY_WEB_SEARCH_COMMAND,
+    args: KINDLY_WEB_SEARCH_ARGS,
     envFields: [
       {
         key: 'SERPER_API_KEY',

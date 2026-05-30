@@ -55,13 +55,26 @@ curl "http://127.0.0.1:8889/search?q=Open%20Design%20local%20LLM&format=json"
 
 ## Open Design MCP Entry
 
-Add this server before public SearXNG fallbacks in `mcp-config.json`:
+Preferred setup:
+
+1. Open Settings -> External MCP.
+2. Click Add server.
+3. Pick `Kindly Web Search - Private SearXNG`.
+4. Save.
+5. Move it above any public SearXNG fallback entries.
+
+The built-in template pre-fills `SEARXNG_BASE_URL=http://127.0.0.1:8889/`,
+the SearXNG timeout, the private Open Design user agent, and conservative
+Kindly MCP timeout/concurrency values.
+
+For manual config or other MCP clients, add this server before public SearXNG
+fallbacks in `mcp-config.json`:
 
 ```json
 {
   "id": "kindly-web-search-private-searxng",
   "label": "Kindly Web Search - Private SearXNG",
-  "templateId": "kindly-web-search",
+  "templateId": "kindly-web-search-private-searxng",
   "transport": "stdio",
   "enabled": true,
   "command": "uvx",
@@ -188,7 +201,8 @@ exactly the same and adapt only the outer config shape.
 1. Copy `deploy/searxng-private/` into the other repo.
 2. Generate a new `server.secret_key` for that project.
 3. Start SearXNG with `docker compose up -d`.
-4. Add the `kindly-web-search-private-searxng` MCP entry.
+4. Add the `kindly-web-search-private-searxng` MCP entry or expose an
+   equivalent first-class MCP template in that project's settings UI.
 5. Put the private entry before public fallback entries.
 6. Restart the app or agent so MCP config is reloaded.
 

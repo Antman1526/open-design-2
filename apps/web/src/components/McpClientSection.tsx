@@ -170,9 +170,9 @@ function rowFromTemplate(
 ): DraftRow {
   const id = suggestMcpServerId(tpl.id, taken);
   const env: Record<string, string> = {};
-  for (const f of tpl.envFields ?? []) env[f.key] = '';
+  for (const f of tpl.envFields ?? []) env[f.key] = f.defaultValue ?? '';
   const headers: Record<string, string> = {};
-  for (const f of tpl.headerFields ?? []) headers[f.key] = '';
+  for (const f of tpl.headerFields ?? []) headers[f.key] = f.defaultValue ?? '';
   return {
     id,
     label: tpl.label,

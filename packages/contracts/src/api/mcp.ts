@@ -55,6 +55,8 @@ export interface McpTemplateField {
   label?: string;
   required?: boolean;
   placeholder?: string;
+  /** Optional value inserted into the editable row when a template is picked. */
+  defaultValue?: string;
   /** Render the value with a password-style input (api keys, tokens). */
   secret?: boolean;
 }

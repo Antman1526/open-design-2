@@ -673,6 +673,26 @@ describe('MCP_TEMPLATES', () => {
     expect(fields.has('KINDLY_WEB_SEARCH_MAX_CONCURRENCY')).toBe(true);
   });
 
+  it('includes a private SearXNG web-search template with localhost defaults', () => {
+    const tpl = MCP_TEMPLATES.find((t) => t.id === 'kindly-web-search-private-searxng');
+    expect(tpl).toBeDefined();
+    expect(tpl?.transport).toBe('stdio');
+    expect(tpl?.category).toBe('web-research');
+    expect(tpl?.command).toBe('uvx');
+    expect(tpl?.args).toEqual([
+      '--from',
+      'git+https://github.com/Shelpuk-AI-Technology-Consulting/kindly-web-search-mcp-server',
+      'kindly-web-search-mcp-server',
+      'start-mcp-server',
+    ]);
+    const defaults = new Map((tpl?.envFields ?? []).map((field) => [field.key, field.defaultValue]));
+    expect(defaults.get('SEARXNG_BASE_URL')).toBe('http://127.0.0.1:8889/');
+    expect(defaults.get('SEARXNG_TIMEOUT_SECONDS')).toBe('20');
+    expect(defaults.get('SEARXNG_USER_AGENT')).toBe('OpenDesign/0.8 (+local; private)');
+    expect(defaults.get('KINDLY_TOOL_TOTAL_TIMEOUT_SECONDS')).toBe('45');
+    expect(defaults.get('KINDLY_WEB_SEARCH_MAX_CONCURRENCY')).toBe('1');
+  });
+
   it('includes the Pollinations stdio template with optional API key', () => {
     const tpl = MCP_TEMPLATES.find((t) => t.id === 'pollinations');
     expect(tpl).toBeDefined();
@@ -760,7 +780,7 @@ describe('MCP_TEMPLATES', () => {
 
   it('groups web-research templates in declaration order', () => {
     const ids = MCP_TEMPLATES.filter((t) => t.category === 'web-research').map((t) => t.id);
-    expect(ids).toEqual(['kindly-web-search']);
+    expect(ids).toEqual(['kindly-web-search-private-searxng', 'kindly-web-search']);
   });
 
   it('groups image-generation templates in declaration order', () => {

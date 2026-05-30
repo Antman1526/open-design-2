@@ -64,6 +64,7 @@ export function selectMcpWebResearchServers(
       typeof server.command === 'string' &&
       server.command.trim().length > 0 &&
       (server.templateId === 'kindly-web-search' ||
+        server.templateId === 'kindly-web-search-private-searxng' ||
         server.id === 'kindly-web-search' ||
         server.id.startsWith('kindly-web-search-')),
   );

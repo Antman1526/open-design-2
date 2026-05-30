@@ -64,6 +64,8 @@ This fork adds local-file and local-LLM functionality:
   Multiple enabled Kindly/SearXNG entries are tried in order, so a later
   instance can be used when an earlier public endpoint errors or returns no
   sources.
+  A copyable private SearXNG setup and MCP guide lives in
+  [docs/private-searxng-for-local-llms.md](docs/private-searxng-for-local-llms.md).
   Returned content is treated as untrusted evidence, and the system prompt
   blocks external MCP web/content tools from fetching localhost,
   private-network, link-local, or metadata-service URLs unless the user

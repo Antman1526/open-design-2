@@ -16,9 +16,12 @@ import { apiProtocolLabel } from '../utils/apiProtocol';
 import {
   activeLocalModelSelection,
   localModelDisplayLabel,
+  localModelOptionsFromRecords,
   localModelOptionsForAgent,
+  mergeLocalModelOptions,
   preferredLocalModelSelection,
 } from '../utils/localModelSelection';
+import { listLocalModels } from '../state/local-models';
 import { AgentIcon } from './AgentIcon';
 import { Icon } from './Icon';
 import { renderModelOptions } from './modelOptions';
@@ -71,6 +74,9 @@ export function InlineModelSwitcher({
 }: Props) {
   const t = useT();
   const [open, setOpen] = useState(false);
+  const [directLocalModelOptions, setDirectLocalModelOptions] = useState<
+    Array<{ id: string; label: string }>
+  >([]);
   const wrapRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -89,6 +95,23 @@ export function InlineModelSwitcher({
       document.removeEventListener('keydown', onKey);
     };
   }, [open]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadLocalModels() {
+      try {
+        const models = await listLocalModels();
+        if (cancelled) return;
+        setDirectLocalModelOptions(localModelOptionsFromRecords(models));
+      } catch {
+        if (!cancelled) setDirectLocalModelOptions([]);
+      }
+    }
+    if (daemonLive) void loadLocalModels();
+    return () => {
+      cancelled = true;
+    };
+  }, [daemonLive]);
 
   const installedAgents = useMemo(
     () => agents.filter((a) => a.available),
@@ -109,17 +132,22 @@ export function InlineModelSwitcher({
   const preferredLocalSelection = preferredLocalModelSelection(
     agents,
     config.agentId,
+    directLocalModelOptions,
   );
   const localSelection = activeLocalSelection ?? preferredLocalSelection;
   const localRunnerAgent =
     agents.find((agent) => agent.id === localSelection?.agentId) ?? null;
-  const localModelOptions = localModelOptionsForAgent(localRunnerAgent);
+  const localModelOptions = mergeLocalModelOptions(
+    localModelOptionsForAgent(localRunnerAgent),
+    directLocalModelOptions,
+  );
   const localModelId = localSelection?.modelId ?? '';
   const localModelLabel = localModelOptions.find((m) => m.id === localModelId)?.label;
   const localModeActive = activeLocalSelection != null;
-  const localRunnerAgents = installedAgents.filter(
-    (agent) => localModelOptionsForAgent(agent).length > 0,
-  );
+  const localRunnerAgents =
+    directLocalModelOptions.length > 0
+      ? installedAgents
+      : installedAgents.filter((agent) => localModelOptionsForAgent(agent).length > 0);
 
   const apiProtocol = config.apiProtocol ?? 'anthropic';
   const providerForProtocol = useMemo(
@@ -252,7 +280,11 @@ export function InlineModelSwitcher({
                 data-testid="inline-model-switcher-mode-local"
                 disabled={!daemonLive}
                 onClick={() => {
-                  const selection = preferredLocalModelSelection(agents, config.agentId);
+                  const selection = preferredLocalModelSelection(
+                    agents,
+                    config.agentId,
+                    directLocalModelOptions,
+                  );
                   if (!selection) {
                     setOpen(false);
                     onOpenSettings?.('local-models');
@@ -310,9 +342,14 @@ export function InlineModelSwitcher({
                           }
                           data-testid={`inline-model-switcher-local-runner-${agent.id}`}
                           onClick={() => {
-                            const model = localModelOptionsForAgent(agent).find(
-                              (option) => option.id === localModelId,
-                            ) ?? localModelOptionsForAgent(agent)[0];
+                            const model = mergeLocalModelOptions(
+                              localModelOptionsForAgent(agent),
+                              directLocalModelOptions,
+                            ).find((option) => option.id === localModelId) ??
+                              mergeLocalModelOptions(
+                                localModelOptionsForAgent(agent),
+                                directLocalModelOptions,
+                              )[0];
                             if (model) onLocalModelChange?.(agent.id, model.id);
                           }}
                         >

@@ -8,9 +8,12 @@ import { apiProtocolLabel } from '../utils/apiProtocol';
 import {
   activeLocalModelSelection,
   localModelDisplayLabel,
+  localModelOptionsFromRecords,
   localModelOptionsForAgent,
+  mergeLocalModelOptions,
   preferredLocalModelSelection,
 } from '../utils/localModelSelection';
+import { listLocalModels } from '../state/local-models';
 import { isMacPlatform } from '../utils/platform';
 
 interface Props {
@@ -65,6 +68,9 @@ export function AvatarMenu({
 }: Props) {
   const t = useT();
   const [open, setOpen] = useState(false);
+  const [directLocalModelOptions, setDirectLocalModelOptions] = useState<
+    Array<{ id: string; label: string }>
+  >([]);
   const wrapRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -83,6 +89,23 @@ export function AvatarMenu({
       document.removeEventListener('keydown', onKey);
     };
   }, [open]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadLocalModels() {
+      try {
+        const models = await listLocalModels();
+        if (cancelled) return;
+        setDirectLocalModelOptions(localModelOptionsFromRecords(models));
+      } catch {
+        if (!cancelled) setDirectLocalModelOptions([]);
+      }
+    }
+    if (daemonLive) void loadLocalModels();
+    return () => {
+      cancelled = true;
+    };
+  }, [daemonLive]);
 
   const currentAgent = useMemo(
     () => agents.find((a) => a.id === config.agentId) ?? null,
@@ -107,17 +130,22 @@ export function AvatarMenu({
   const preferredLocalSelection = preferredLocalModelSelection(
     agents,
     config.agentId,
+    directLocalModelOptions,
   );
   const localSelection = activeLocalSelection ?? preferredLocalSelection;
   const localRunnerAgent =
     agents.find((agent) => agent.id === localSelection?.agentId) ?? null;
-  const localModelOptions = localModelOptionsForAgent(localRunnerAgent);
+  const localModelOptions = mergeLocalModelOptions(
+    localModelOptionsForAgent(localRunnerAgent),
+    directLocalModelOptions,
+  );
   const localModelId = localSelection?.modelId ?? '';
   const localModelLabel = localModelOptions.find((m) => m.id === localModelId)?.label;
   const localModeActive = activeLocalSelection != null;
-  const localRunnerAgents = installedAgents.filter(
-    (agent) => localModelOptionsForAgent(agent).length > 0,
-  );
+  const localRunnerAgents =
+    directLocalModelOptions.length > 0
+      ? installedAgents
+      : installedAgents.filter((agent) => localModelOptionsForAgent(agent).length > 0);
 
   return (
     <div className="avatar-menu" ref={wrapRef}>
@@ -181,7 +209,11 @@ export function AvatarMenu({
             type="button"
             className="avatar-item"
             onClick={() => {
-              const selection = preferredLocalModelSelection(agents, config.agentId);
+              const selection = preferredLocalModelSelection(
+                agents,
+                config.agentId,
+                directLocalModelOptions,
+              );
               if (!selection) {
                 setOpen(false);
                 onOpenSettings('local-models');
@@ -224,9 +256,11 @@ export function AvatarMenu({
                     key={agent.id}
                     className="avatar-item"
                     onClick={() => {
-                      const model = localModelOptionsForAgent(agent).find(
-                        (option) => option.id === localModelId,
-                      ) ?? localModelOptionsForAgent(agent)[0];
+                      const options = mergeLocalModelOptions(
+                        localModelOptionsForAgent(agent),
+                        directLocalModelOptions,
+                      );
+                      const model = options.find((option) => option.id === localModelId) ?? options[0];
                       if (model) onLocalModelChange(agent.id, model.id);
                     }}
                   >

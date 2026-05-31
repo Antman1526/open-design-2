@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { InlineModelSwitcher } from '../../src/components/InlineModelSwitcher';
@@ -48,7 +48,10 @@ const agents: AgentInfo[] = [
   },
 ];
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 describe('InlineModelSwitcher local models mode', () => {
   it('exposes Local Models as a first-class mode and selects the Hermes local model runner', () => {
@@ -109,5 +112,72 @@ describe('InlineModelSwitcher local models mode', () => {
     expect((localMode as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(localMode);
     expect(onOpenSettings).toHaveBeenCalledWith('local-models');
+  });
+
+  it('lets a project choose a scanned local model even when agents do not include local model options', async () => {
+    const onLocalModelChange = vi.fn();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url === '/api/local-models') {
+          return {
+            ok: true,
+            json: async () => ({
+              models: [
+                {
+                  id: 'lm_hermes_abc123',
+                  name: 'Hermes-3-Llama-3.1-8B-Q4_K_M',
+                  fileName: 'Hermes-3-Llama-3.1-8B-Q4_K_M.gguf',
+                  path: '/Users/Antman/Desktop/AI_Models/GGUF/Hermes-3-Llama-3.1-8B-Q4_K_M.gguf',
+                  sizeBytes: 4920734624,
+                  mtimeMs: 1,
+                  digest: 'abc123',
+                  roles: ['design'],
+                  enabled: true,
+                  available: true,
+                  discoveredAt: 1,
+                  lastSeenAt: 1,
+                  missingSince: null,
+                  updatedAt: 1,
+                },
+              ],
+            }),
+          };
+        }
+        throw new Error(`unexpected fetch ${url}`);
+      }),
+    );
+
+    render(
+      <I18nProvider initial="en">
+        <InlineModelSwitcher
+          config={config}
+          agents={[
+            {
+              id: 'hermes',
+              name: 'Hermes',
+              bin: 'hermes',
+              available: true,
+              models: [{ id: 'default', label: 'Default (CLI config)' }],
+            },
+          ]}
+          daemonLive
+          onModeChange={vi.fn()}
+          onAgentChange={vi.fn()}
+          onAgentModelChange={vi.fn()}
+          onLocalModelChange={onLocalModelChange}
+          onApiProtocolChange={vi.fn()}
+          onApiModelChange={vi.fn()}
+          onOpenSettings={vi.fn()}
+        />
+      </I18nProvider>,
+    );
+
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/local-models'));
+
+    fireEvent.click(screen.getByTestId('inline-model-switcher-chip'));
+    fireEvent.click(screen.getByTestId('inline-model-switcher-mode-local'));
+
+    expect(onLocalModelChange).toHaveBeenCalledWith('hermes', 'lm_hermes_abc123');
   });
 });

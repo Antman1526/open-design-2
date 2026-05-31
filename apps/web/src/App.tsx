@@ -746,6 +746,25 @@ export function App() {
     [config],
   );
 
+  const handleLocalModelChange = useCallback(
+    (agentId: string, model: string) => {
+      const prev = config.agentModels?.[agentId] ?? {};
+      const next: AppConfig = {
+        ...config,
+        mode: 'daemon',
+        agentId,
+        agentModels: {
+          ...(config.agentModels ?? {}),
+          [agentId]: { ...prev, model },
+        },
+      };
+      saveConfig(next);
+      void syncConfigToDaemon(next);
+      setConfig(next);
+    },
+    [config],
+  );
+
   // BYOK protocol switch — also flips `mode` to 'api' so the user does
   // not have to take a second step after picking a provider from the
   // inline switcher. The helper preserves any per-protocol fields the
@@ -1363,6 +1382,7 @@ export function App() {
         onModeChange={handleModeChange}
         onAgentChange={handleAgentChange}
         onAgentModelChange={handleAgentModelChange}
+        onLocalModelChange={handleLocalModelChange}
         onRefreshAgents={refreshAgents}
         onOpenSettings={openSettings}
         onOpenMcpSettings={openMcpSettings}
@@ -1397,6 +1417,7 @@ export function App() {
         onModeChange={handleModeChange}
         onAgentChange={handleAgentChange}
         onAgentModelChange={handleAgentModelChange}
+        onLocalModelChange={handleLocalModelChange}
         onApiProtocolChange={handleApiProtocolChange}
         onApiModelChange={handleApiModelChange}
         onConfigPersist={handleConfigPersist}

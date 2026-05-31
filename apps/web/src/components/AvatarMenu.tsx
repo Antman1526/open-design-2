@@ -5,6 +5,12 @@ import { Icon } from './Icon';
 import { renderModelOptions } from './modelOptions';
 import type { AgentInfo, AppConfig, ExecMode } from '../types';
 import { apiProtocolLabel } from '../utils/apiProtocol';
+import {
+  activeLocalModelSelection,
+  localModelDisplayLabel,
+  localModelOptionsForAgent,
+  preferredLocalModelSelection,
+} from '../utils/localModelSelection';
 import { isMacPlatform } from '../utils/platform';
 
 interface Props {
@@ -17,6 +23,7 @@ interface Props {
     id: string,
     choice: { model?: string; reasoning?: string },
   ) => void;
+  onLocalModelChange: (agentId: string, model: string) => void;
   onOpenSettings: () => void;
   onRefreshAgents: () => void;
   onBack?: () => void;
@@ -34,6 +41,7 @@ export function AvatarMenu({
   onModeChange,
   onAgentChange,
   onAgentModelChange,
+  onLocalModelChange,
   onOpenSettings,
   onRefreshAgents,
   onBack,
@@ -78,6 +86,21 @@ export function AvatarMenu({
   const currentModelLabel = currentAgent?.models?.find(
     (m) => m.id === currentModelId,
   )?.label;
+  const activeLocalSelection = activeLocalModelSelection(agents, config);
+  const preferredLocalSelection = preferredLocalModelSelection(
+    agents,
+    config.agentId,
+  );
+  const localSelection = activeLocalSelection ?? preferredLocalSelection;
+  const localRunnerAgent =
+    agents.find((agent) => agent.id === localSelection?.agentId) ?? null;
+  const localModelOptions = localModelOptionsForAgent(localRunnerAgent);
+  const localModelId = localSelection?.modelId ?? '';
+  const localModelLabel = localModelOptions.find((m) => m.id === localModelId)?.label;
+  const localModeActive = activeLocalSelection != null;
+  const localRunnerAgents = installedAgents.filter(
+    (agent) => localModelOptionsForAgent(agent).length > 0,
+  );
 
   return (
     <div className="avatar-menu" ref={wrapRef}>
@@ -96,12 +119,16 @@ export function AvatarMenu({
         <div className="avatar-popover" role="menu">
           <div className="avatar-popover-head">
             <span className="who">
-              {config.mode === 'daemon'
+              {localModeActive
+                ? t('avatar.localModels')
+                : config.mode === 'daemon'
                 ? t('avatar.localCli')
                 : apiProtocolLabel(config.apiProtocol)}
             </span>
             <span className="where">
-              {config.mode === 'api'
+              {localModeActive
+                ? `${localRunnerAgent?.name ?? t('avatar.noAgentSelected')}${localModelLabel ? ` · ${localModelDisplayLabel(localModelLabel)}` : ''}`
+                : config.mode === 'api'
                 ? safeHost(config.baseUrl)
                 : currentAgent
                   ? `${currentAgent.name}${currentAgent.version ? ` · ${currentAgent.version}` : ''}${currentModelLabel && currentModelId !== 'default' ? ` · ${currentModelLabel}` : ''}`
@@ -136,6 +163,28 @@ export function AvatarMenu({
           <button
             type="button"
             className="avatar-item"
+            onClick={() => {
+              const selection = preferredLocalModelSelection(agents, config.agentId);
+              if (!selection) {
+                setOpen(false);
+                onOpenSettings();
+                return;
+              }
+              onLocalModelChange(selection.agentId, selection.modelId);
+            }}
+            disabled={!daemonLive || preferredLocalSelection == null}
+          >
+            <span className="avatar-item-icon" aria-hidden>
+              <Icon name="folder" size={14} />
+            </span>
+            <span>{t('avatar.useLocalModels')}</span>
+            {localModeActive ? (
+              <span className="avatar-item-meta">{t('avatar.metaActive')}</span>
+            ) : null}
+          </button>
+          <button
+            type="button"
+            className="avatar-item"
             onClick={() => onModeChange('api')}
           >
             <span className="avatar-item-icon" aria-hidden>
@@ -147,7 +196,60 @@ export function AvatarMenu({
             ) : null}
           </button>
 
-          {config.mode === 'daemon' && installedAgents.length > 0 ? (
+          {localModeActive && localRunnerAgents.length > 0 ? (
+            <>
+              <div className="avatar-section-label">{t('avatar.runnerSection')}</div>
+              {localRunnerAgents.map((agent) => {
+                const active = localRunnerAgent?.id === agent.id;
+                return (
+                  <button
+                    type="button"
+                    key={agent.id}
+                    className="avatar-item"
+                    onClick={() => {
+                      const model = localModelOptionsForAgent(agent).find(
+                        (option) => option.id === localModelId,
+                      ) ?? localModelOptionsForAgent(agent)[0];
+                      if (model) onLocalModelChange(agent.id, model.id);
+                    }}
+                  >
+                    <AgentIcon id={agent.id} size={18} />
+                    <span>{agent.name}</span>
+                    {active ? (
+                      <span className="avatar-item-meta">
+                        {t('avatar.metaSelected')}
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })}
+              {localRunnerAgent && localModelOptions.length > 0 ? (
+                <div className="avatar-model-section">
+                  <div className="avatar-section-label">
+                    {t('avatar.localModelSection')}
+                  </div>
+                  <label className="avatar-select-row">
+                    <span className="avatar-select-label">
+                      {t('avatar.localModelLabel')}
+                    </span>
+                    <select
+                      className="avatar-select"
+                      value={localModelId}
+                      onChange={(e) =>
+                        onLocalModelChange(localRunnerAgent.id, e.target.value)
+                      }
+                    >
+                      {localModelOptions.map((model) => (
+                        <option key={model.id} value={model.id}>
+                          {localModelDisplayLabel(model.label)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              ) : null}
+            </>
+          ) : config.mode === 'daemon' && installedAgents.length > 0 ? (
             <>
               <div className="avatar-section-label">{t('avatar.codeAgent')}</div>
               {installedAgents.map((a) => (

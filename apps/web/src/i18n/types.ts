@@ -275,6 +275,9 @@ export interface Dict {
   'settings.getStarted': string;
   'settings.envConfigure': string;
   'settings.localCli': string;
+  'settings.localModelsMode': string;
+  'settings.localModelsModeMeta': string;
+  'settings.localModelsModeHelp': string;
   'settings.anthropicApi': string;
   'settings.noAgentSelected': string;
   'settings.language': string;
@@ -1590,8 +1593,10 @@ export interface Dict {
   // Avatar menu (project topbar)
   'avatar.title': string;
   'avatar.localCli': string;
+  'avatar.localModels': string;
   'avatar.anthropicApi': string;
   'avatar.useLocal': string;
+  'avatar.useLocalModels': string;
   'avatar.useApi': string;
   'avatar.codeAgent': string;
   'avatar.rescan': string;
@@ -1603,12 +1608,16 @@ export interface Dict {
   'avatar.noAgentSelected': string;
   'avatar.modelSection': string;
   'avatar.modelLabel': string;
+  'avatar.runnerSection': string;
+  'avatar.localModelSection': string;
+  'avatar.localModelLabel': string;
   'avatar.reasoningLabel': string;
   'avatar.customSuffix': string;
 
   // Inline CLI / model switcher (entry topbar)
   'inlineSwitcher.chipTitle': string;
   'inlineSwitcher.chipCli': string;
+  'inlineSwitcher.chipLocalModels': string;
   'inlineSwitcher.chipByok': string;
   'inlineSwitcher.modelDefault': string;
   'inlineSwitcher.noAgent': string;
@@ -1617,13 +1626,17 @@ export interface Dict {
   'inlineSwitcher.providerLabel': string;
   'inlineSwitcher.modelLabel': string;
   'inlineSwitcher.useCli': string;
+  'inlineSwitcher.useLocalModels': string;
   'inlineSwitcher.useByok': string;
   'inlineSwitcher.daemonOffline': string;
   'inlineSwitcher.noAgentsDetected': string;
+  'inlineSwitcher.noLocalModelsDetected': string;
   'inlineSwitcher.openSettingsForModel': string;
   'inlineSwitcher.missingApiKey': string;
   'inlineSwitcher.openFullSettings': string;
   'inlineSwitcher.customSuffix': string;
+  'inlineSwitcher.runnerLabel': string;
+  'inlineSwitcher.localModelLabel': string;
 
   // Project view / chat pane / composer
   'project.backToProjects': string;

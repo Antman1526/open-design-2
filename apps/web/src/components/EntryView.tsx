@@ -69,6 +69,7 @@ interface Props {
     id: string,
     choice: { model?: string; reasoning?: string },
   ) => void;
+  onLocalModelChange: (agentId: string, model: string) => void;
   onApiProtocolChange: (protocol: ApiProtocol) => void;
   onApiModelChange: (model: string) => void;
   onConfigPersist: (cfg: AppConfig) => Promise<void> | void;
@@ -259,6 +260,7 @@ export function EntryView({
   onModeChange,
   onAgentChange,
   onAgentModelChange,
+  onLocalModelChange,
   onApiProtocolChange,
   onApiModelChange,
   onConfigPersist,
@@ -358,6 +360,7 @@ export function EntryView({
       onModeChange={onModeChange}
       onAgentChange={onAgentChange}
       onAgentModelChange={onAgentModelChange}
+      onLocalModelChange={onLocalModelChange}
       onApiProtocolChange={onApiProtocolChange}
       onApiModelChange={onApiModelChange}
       onConfigPersist={onConfigPersist}

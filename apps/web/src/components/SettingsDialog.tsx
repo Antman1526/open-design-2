@@ -114,6 +114,10 @@ import {
   requestNotificationPermission,
   showCompletionNotification,
 } from '../utils/notifications';
+import {
+  activeLocalModelSelection,
+  preferredLocalModelSelection,
+} from '../utils/localModelSelection';
 
 export type SettingsSection =
   | 'execution'
@@ -1047,6 +1051,26 @@ export function SettingsDialog({
       return { ...c, mode };
     });
   };
+
+  const setLocalModelMode = () => {
+    const selection = preferredLocalModelSelection(agents, cfg.agentId);
+    if (!selection) {
+      setActiveSection('local-models');
+      return;
+    }
+    setCfg((c) => {
+      const prev = c.agentModels?.[selection.agentId] ?? {};
+      return {
+        ...c,
+        mode: 'daemon',
+        agentId: selection.agentId,
+        agentModels: {
+          ...(c.agentModels ?? {}),
+          [selection.agentId]: { ...prev, model: selection.modelId },
+        },
+      };
+    });
+  };
   const setApiProtocol = (protocol: ApiProtocol) => {
     setApiModelCustomEditing(false);
     focusByokRequiredFieldAfterProtocolSwitchRef.current = true;
@@ -1949,6 +1973,9 @@ export function SettingsDialog({
   const activeHeader = sectionHeader[activeSection];
   const installedAgents = agents.filter((a) => a.available);
   const unavailableAgents = agents.filter((a) => !a.available);
+  const activeLocalSelection = activeLocalModelSelection(agents, cfg);
+  const localModeActive = activeLocalSelection != null;
+  const preferredLocalSelection = preferredLocalModelSelection(agents, cfg.agentId);
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -2222,15 +2249,15 @@ export function SettingsDialog({
                 className="seg-control"
                 role="tablist"
                 aria-label={t('settings.modeAria')}
-                style={{ ['--seg-cols' as string]: 2 } as CSSProperties}
+                style={{ ['--seg-cols' as string]: 3 } as CSSProperties}
               >
                 <button
                   type="button"
                   role="tab"
-                  aria-selected={cfg.mode === 'daemon'}
+                  aria-selected={cfg.mode === 'daemon' && !localModeActive}
                   className={
                     'seg-btn seg-btn--inline' +
-                    (cfg.mode === 'daemon' ? ' active' : '')
+                    (cfg.mode === 'daemon' && !localModeActive ? ' active' : '')
                   }
                   disabled={!daemonLive}
                   onClick={() => setMode('daemon')}
@@ -2246,6 +2273,21 @@ export function SettingsDialog({
                       ? t('settings.modeDaemonInstalledMeta', { count: installedCount })
                       : t('settings.modeDaemonOfflineMeta')}
                   </span>
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={localModeActive}
+                  className={
+                    'seg-btn seg-btn--inline' +
+                    (localModeActive ? ' active' : '')
+                  }
+                  disabled={!daemonLive || preferredLocalSelection == null}
+                  onClick={setLocalModelMode}
+                  title={t('settings.localModelsModeHelp')}
+                >
+                  <span className="seg-title">{t('settings.localModelsMode')}</span>
+                  <span className="seg-meta">{t('settings.localModelsModeMeta')}</span>
                 </button>
                 <button
                   type="button"

@@ -13,6 +13,12 @@ import { useT } from '../i18n';
 import { KNOWN_PROVIDERS } from '../state/config';
 import type { AgentInfo, ApiProtocol, AppConfig, ExecMode } from '../types';
 import { apiProtocolLabel } from '../utils/apiProtocol';
+import {
+  activeLocalModelSelection,
+  localModelDisplayLabel,
+  localModelOptionsForAgent,
+  preferredLocalModelSelection,
+} from '../utils/localModelSelection';
 import { AgentIcon } from './AgentIcon';
 import { Icon } from './Icon';
 import { renderModelOptions } from './modelOptions';
@@ -27,6 +33,7 @@ interface Props {
     id: string,
     choice: { model?: string; reasoning?: string },
   ) => void;
+  onLocalModelChange: (agentId: string, model: string) => void;
   onApiProtocolChange: (protocol: ApiProtocol) => void;
   onApiModelChange: (model: string) => void;
   onOpenSettings: (
@@ -56,6 +63,7 @@ export function InlineModelSwitcher({
   onModeChange,
   onAgentChange,
   onAgentModelChange,
+  onLocalModelChange,
   onApiProtocolChange,
   onApiModelChange,
   onOpenSettings,
@@ -96,6 +104,21 @@ export function InlineModelSwitcher({
     currentChoice.model ?? currentAgent?.models?.[0]?.id ?? null;
   const currentModelLabel =
     currentAgent?.models?.find((m) => m.id === currentModelId)?.label ?? null;
+  const activeLocalSelection = activeLocalModelSelection(agents, config);
+  const preferredLocalSelection = preferredLocalModelSelection(
+    agents,
+    config.agentId,
+  );
+  const localSelection = activeLocalSelection ?? preferredLocalSelection;
+  const localRunnerAgent =
+    agents.find((agent) => agent.id === localSelection?.agentId) ?? null;
+  const localModelOptions = localModelOptionsForAgent(localRunnerAgent);
+  const localModelId = localSelection?.modelId ?? '';
+  const localModelLabel = localModelOptions.find((m) => m.id === localModelId)?.label;
+  const localModeActive = activeLocalSelection != null;
+  const localRunnerAgents = installedAgents.filter(
+    (agent) => localModelOptionsForAgent(agent).length > 0,
+  );
 
   const apiProtocol = config.apiProtocol ?? 'anthropic';
   const providerForProtocol = useMemo(
@@ -114,15 +137,22 @@ export function InlineModelSwitcher({
   // Chip text — keep it tight so the pill doesn't wrap on small viewports.
   // CLI: "Claude · Sonnet 4.5"; BYOK: "Anthropic · sonnet-4.5".
   const chipMode =
-    config.mode === 'daemon'
+    localModeActive
+      ? t('inlineSwitcher.chipLocalModels')
+      : config.mode === 'daemon'
       ? t('inlineSwitcher.chipCli')
       : t('inlineSwitcher.chipByok');
   const chipPrimary =
-    config.mode === 'daemon'
+    localModeActive
+      ? localRunnerAgent?.name ?? t('inlineSwitcher.noAgent')
+      : config.mode === 'daemon'
       ? currentAgent?.name ?? t('inlineSwitcher.noAgent')
       : apiProtocolLabel(apiProtocol);
   const chipModel =
-    config.mode === 'daemon'
+    localModeActive
+      ? localModelDisplayLabel(localModelLabel ?? localModelId) ||
+        t('inlineSwitcher.modelDefault')
+      : config.mode === 'daemon'
       ? currentModelLabel && currentModelId !== 'default'
         ? currentModelLabel
         : t('inlineSwitcher.modelDefault')
@@ -145,7 +175,7 @@ export function InlineModelSwitcher({
       >
         <span className="inline-switcher__chip-icon" aria-hidden="true">
           {config.mode === 'daemon' && currentAgent ? (
-            <AgentIcon id={currentAgent.id} size={18} />
+            <AgentIcon id={localModeActive && localRunnerAgent ? localRunnerAgent.id : currentAgent.id} size={18} />
           ) : (
             <span className="inline-switcher__byok-glyph">
               <Icon name="link" size={12} />
@@ -187,7 +217,7 @@ export function InlineModelSwitcher({
                 aria-selected={config.mode === 'daemon'}
                 className={
                   'inline-switcher__seg-btn' +
-                  (config.mode === 'daemon' ? ' is-active' : '')
+                  (config.mode === 'daemon' && !localModeActive ? ' is-active' : '')
                 }
                 data-testid="inline-model-switcher-mode-daemon"
                 disabled={!daemonLive && config.mode !== 'daemon'}
@@ -213,6 +243,29 @@ export function InlineModelSwitcher({
               <button
                 type="button"
                 role="tab"
+                aria-selected={localModeActive}
+                className={
+                  'inline-switcher__seg-btn' +
+                  (localModeActive ? ' is-active' : '')
+                }
+                data-testid="inline-model-switcher-mode-local"
+                disabled={!daemonLive || preferredLocalSelection == null}
+                onClick={() => {
+                  const selection = preferredLocalModelSelection(agents, config.agentId);
+                  if (!selection) {
+                    setOpen(false);
+                    onOpenSettings?.('execution');
+                    return;
+                  }
+                  onLocalModelChange?.(selection.agentId, selection.modelId);
+                }}
+                title={t('inlineSwitcher.useLocalModels')}
+              >
+                {t('inlineSwitcher.chipLocalModels')}
+              </button>
+              <button
+                type="button"
+                role="tab"
                 aria-selected={config.mode === 'api'}
                 className={
                   'inline-switcher__seg-btn' +
@@ -227,7 +280,75 @@ export function InlineModelSwitcher({
             </div>
           </div>
 
-          {config.mode === 'daemon' ? (
+          {localModeActive ? (
+            <>
+              <div className="inline-switcher__row">
+                <span className="inline-switcher__label">
+                  {t('inlineSwitcher.runnerLabel')}
+                </span>
+                {localRunnerAgents.length === 0 ? (
+                  <span className="inline-switcher__hint">
+                    {t('inlineSwitcher.noLocalModelsDetected')}
+                  </span>
+                ) : (
+                  <div
+                    className="inline-switcher__agent-grid"
+                    role="radiogroup"
+                  >
+                    {localRunnerAgents.map((agent) => {
+                      const active = localRunnerAgent?.id === agent.id;
+                      return (
+                        <button
+                          key={agent.id}
+                          type="button"
+                          role="radio"
+                          aria-checked={active}
+                          className={
+                            'inline-switcher__agent' +
+                            (active ? ' is-active' : '')
+                          }
+                          data-testid={`inline-model-switcher-local-runner-${agent.id}`}
+                          onClick={() => {
+                            const model = localModelOptionsForAgent(agent).find(
+                              (option) => option.id === localModelId,
+                            ) ?? localModelOptionsForAgent(agent)[0];
+                            if (model) onLocalModelChange?.(agent.id, model.id);
+                          }}
+                        >
+                          <AgentIcon id={agent.id} size={20} />
+                          <span className="inline-switcher__agent-name">
+                            {agent.name}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {localRunnerAgent && localModelOptions.length > 0 ? (
+                <div className="inline-switcher__row">
+                  <span className="inline-switcher__label">
+                    {t('inlineSwitcher.localModelLabel')}
+                  </span>
+                  <select
+                    className="inline-switcher__select"
+                    data-testid="inline-model-switcher-local-model"
+                    value={localModelId}
+                    onChange={(e) =>
+                      onLocalModelChange?.(localRunnerAgent.id, e.target.value)
+                    }
+                  >
+                    {localModelOptions.map((model) => (
+                      <option key={model.id} value={model.id}>
+                        {localModelDisplayLabel(model.label)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : null}
+            </>
+          ) : config.mode === 'daemon' ? (
             <>
               <div className="inline-switcher__row">
                 <span className="inline-switcher__label">

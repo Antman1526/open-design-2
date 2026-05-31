@@ -205,6 +205,7 @@ interface Props {
     id: string,
     choice: { model?: string; reasoning?: string },
   ) => void;
+  onLocalModelChange?: (agentId: string, model: string) => void;
   onRefreshAgents: () => void;
   onOpenSettings: (section?: SettingsSection) => void;
   onOpenMcpSettings?: () => void;
@@ -487,6 +488,7 @@ export function ProjectView({
   onModeChange,
   onAgentChange,
   onAgentModelChange,
+  onLocalModelChange = () => undefined,
   onRefreshAgents,
   onOpenSettings,
   onOpenMcpSettings,
@@ -4101,6 +4103,7 @@ export function ProjectView({
               onModeChange={onModeChange}
               onAgentChange={onAgentChange}
               onAgentModelChange={onAgentModelChange}
+              onLocalModelChange={onLocalModelChange}
               onOpenSettings={onOpenSettings}
               onRefreshAgents={onRefreshAgents}
               onBack={onBack}

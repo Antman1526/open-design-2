@@ -24,7 +24,24 @@ interface Props {
     choice: { model?: string; reasoning?: string },
   ) => void;
   onLocalModelChange: (agentId: string, model: string) => void;
-  onOpenSettings: () => void;
+  onOpenSettings: (
+    section?:
+      | 'execution'
+      | 'media'
+      | 'composio'
+      | 'local-models'
+      | 'orbit'
+      | 'integrations'
+      | 'mcpClient'
+      | 'language'
+      | 'appearance'
+      | 'notifications'
+      | 'pet'
+      | 'library'
+      | 'about'
+      | 'memory'
+      | 'designSystems',
+  ) => void;
   onRefreshAgents: () => void;
   onBack?: () => void;
 }
@@ -167,12 +184,12 @@ export function AvatarMenu({
               const selection = preferredLocalModelSelection(agents, config.agentId);
               if (!selection) {
                 setOpen(false);
-                onOpenSettings();
+                onOpenSettings('local-models');
                 return;
               }
               onLocalModelChange(selection.agentId, selection.modelId);
             }}
-            disabled={!daemonLive || preferredLocalSelection == null}
+            disabled={!daemonLive}
           >
             <span className="avatar-item-icon" aria-hidden>
               <Icon name="folder" size={14} />

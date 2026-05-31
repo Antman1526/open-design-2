@@ -2282,7 +2282,7 @@ export function SettingsDialog({
                     'seg-btn seg-btn--inline' +
                     (localModeActive ? ' active' : '')
                   }
-                  disabled={!daemonLive || preferredLocalSelection == null}
+                  disabled={!daemonLive}
                   onClick={setLocalModelMode}
                   title={t('settings.localModelsModeHelp')}
                 >

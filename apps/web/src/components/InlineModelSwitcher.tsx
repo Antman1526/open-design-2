@@ -41,6 +41,7 @@ interface Props {
       | 'execution'
       | 'media'
       | 'composio'
+      | 'local-models'
       | 'language'
       | 'appearance'
       | 'notifications'
@@ -249,12 +250,12 @@ export function InlineModelSwitcher({
                   (localModeActive ? ' is-active' : '')
                 }
                 data-testid="inline-model-switcher-mode-local"
-                disabled={!daemonLive || preferredLocalSelection == null}
+                disabled={!daemonLive}
                 onClick={() => {
                   const selection = preferredLocalModelSelection(agents, config.agentId);
                   if (!selection) {
                     setOpen(false);
-                    onOpenSettings?.('execution');
+                    onOpenSettings?.('local-models');
                     return;
                   }
                   onLocalModelChange?.(selection.agentId, selection.modelId);

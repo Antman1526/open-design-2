@@ -116,6 +116,8 @@ export interface Dict {
   'settings.onboardingLocalTitle': string;
   'settings.onboardingLocalBody': string;
   'settings.onboardingLocalAction': string;
+  'settings.onboardingLocalModelsTitle': string;
+  'settings.onboardingLocalModelsBody': string;
   'settings.onboardingCliScanHint': string;
   'settings.onboardingByokTitle': string;
   'settings.onboardingByokBody': string;

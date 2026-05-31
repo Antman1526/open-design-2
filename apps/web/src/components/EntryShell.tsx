@@ -270,6 +270,7 @@ interface Props {
       | 'execution'
       | 'media'
       | 'composio'
+      | 'local-models'
       | 'orbit'
       | 'integrations'
       | 'mcpClient'
@@ -531,6 +532,7 @@ export function EntryShell({
             onApiModelChange={onApiModelChange}
             onConfigPersist={onConfigPersist}
             onRefreshAgents={onRefreshAgents}
+            onOpenSettings={onOpenSettings}
             renderDesignSystemCreation={renderDesignSystemCreation}
             onFinish={finishOnboarding}
           />
@@ -741,6 +743,7 @@ function OnboardingView({
   onApiModelChange,
   onConfigPersist,
   onRefreshAgents,
+  onOpenSettings,
   renderDesignSystemCreation,
   onFinish,
 }: {
@@ -758,6 +761,24 @@ function OnboardingView({
   onApiModelChange: (model: string) => void;
   onConfigPersist: (cfg: AppConfig) => Promise<void> | void;
   onRefreshAgents: () => Promise<AgentInfo[]> | AgentInfo[];
+  onOpenSettings: (
+    section?:
+      | 'execution'
+      | 'media'
+      | 'composio'
+      | 'local-models'
+      | 'orbit'
+      | 'integrations'
+      | 'mcpClient'
+      | 'language'
+      | 'appearance'
+      | 'notifications'
+      | 'pet'
+      | 'library'
+      | 'about'
+      | 'memory'
+      | 'designSystems',
+  ) => void;
   renderDesignSystemCreation?: (
     onBack: () => void,
     hooks?: {
@@ -775,7 +796,7 @@ function OnboardingView({
   const t = useT();
   const analytics = useAnalytics();
   const [step, setStep] = useState(0);
-  const [runtime, setRuntime] = useState<'local' | 'byok' | null>(null);
+  const [runtime, setRuntime] = useState<'local' | 'local-models' | 'byok' | null>(null);
   const [designSource, setDesignSource] = useState<'github' | 'upload' | 'prompt' | null>(null);
   const [apiKeyVisible, setApiKeyVisible] = useState(false);
   const [cliScanStatus, setCliScanStatus] = useState<'idle' | 'scanning' | 'done'>('idle');
@@ -1041,8 +1062,8 @@ function OnboardingView({
   const isLastStep = step === steps.length - 1;
 
   const runtimeItems: Array<{
-    id: 'local' | 'byok';
-    icon: 'hammer' | 'sliders';
+    id: 'local' | 'local-models' | 'byok';
+    icon: 'hammer' | 'folder' | 'sliders';
     title: string;
     body: string;
     onSelect: () => void;
@@ -1057,6 +1078,20 @@ function OnboardingView({
           runtime_type: 'local_cli',
         });
         void scanCliAgents();
+      },
+    },
+    {
+      id: 'local-models',
+      icon: 'folder',
+      title: t('settings.onboardingLocalModelsTitle'),
+      body: t('settings.onboardingLocalModelsBody'),
+      onSelect: () => {
+        emitOnboardingClick('local_coding_agent', 'select_runtime', {
+          runtime_type: 'local_cli',
+        });
+        setRuntime('local-models');
+        onModeChange('daemon');
+        onOpenSettings('local-models');
       },
     },
     {
@@ -2277,7 +2312,7 @@ function OnboardingChoiceCard({
   featured,
   onClick,
 }: {
-  icon: 'orbit' | 'hammer' | 'sliders' | 'github' | 'upload' | 'sparkles';
+  icon: 'orbit' | 'hammer' | 'folder' | 'sliders' | 'github' | 'upload' | 'sparkles';
   title: string;
   body: string;
   actionLabel?: string;

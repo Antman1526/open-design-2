@@ -12,6 +12,10 @@ import {
 } from '../state/local-models';
 
 const DEFAULT_ROOT = '/Users/Antman/Desktop/AI_Models';
+const MODEL_ROOT_PRESETS = [
+  '/Users/Antman/Desktop/AI_Models',
+  '/Volumes/MainStore/Development/AI_Models',
+];
 const ROOT_STORAGE_KEY = 'open-design.localModelRoot';
 const LLAMA_SERVER_BIN_STORAGE_KEY = 'open-design.llamaServerBin';
 const TEST_TASKS = ['design', 'code', 'summary', 'critique', 'repair', 'embedding'] as const;
@@ -255,6 +259,18 @@ export function LocalModelsSection() {
             </button>
           </div>
         </label>
+        <div className="field-hint local-model-root-presets">
+          {MODEL_ROOT_PRESETS.map((preset) => (
+            <button
+              key={preset}
+              type="button"
+              className="btn-secondary"
+              onClick={() => setRoot(preset)}
+            >
+              {preset}
+            </button>
+          ))}
+        </div>
         <label className="field">
           <span className="field-label">llama-server binary</span>
           <div className="field-row">

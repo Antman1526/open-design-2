@@ -75,4 +75,39 @@ describe('InlineModelSwitcher local models mode', () => {
 
     expect(onLocalModelChange).toHaveBeenCalledWith('hermes', 'lm_qwen_abc123');
   });
+
+  it('opens Local Models settings instead of disabling the mode when no model is attached to agents', () => {
+    const onOpenSettings = vi.fn();
+    render(
+      <I18nProvider initial="en">
+        <InlineModelSwitcher
+          config={config}
+          agents={[
+            {
+              id: 'hermes',
+              name: 'Hermes',
+              bin: 'hermes',
+              available: true,
+              models: [{ id: 'default', label: 'Default (CLI config)' }],
+            },
+          ]}
+          daemonLive
+          onModeChange={vi.fn()}
+          onAgentChange={vi.fn()}
+          onAgentModelChange={vi.fn()}
+          onLocalModelChange={vi.fn()}
+          onApiProtocolChange={vi.fn()}
+          onApiModelChange={vi.fn()}
+          onOpenSettings={onOpenSettings}
+        />
+      </I18nProvider>,
+    );
+
+    fireEvent.click(screen.getByTestId('inline-model-switcher-chip'));
+    const localMode = screen.getByTestId('inline-model-switcher-mode-local');
+
+    expect((localMode as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(localMode);
+    expect(onOpenSettings).toHaveBeenCalledWith('local-models');
+  });
 });

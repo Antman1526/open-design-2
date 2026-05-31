@@ -100,6 +100,8 @@ export const fr: Dict = {
   'settings.onboardingLocalTitle': "Local coding agent",
   'settings.onboardingLocalBody': "Use an installed CLI such as Claude Code, Codex, Cursor, Gemini, or OpenCode.",
   'settings.onboardingLocalAction': "Open CLI settings",
+  'settings.onboardingLocalModelsTitle': "Local models",
+  'settings.onboardingLocalModelsBody': "Scan and select GGUF models from /Users/Antman/Desktop/AI_Models or /Volumes/MainStore/Development/AI_Models.",
   'settings.onboardingCliScanHint': "This usually takes 5-10 seconds.",
   'settings.onboardingByokTitle': "Bring your own key",
   'settings.onboardingByokBody': "Use your own model provider credentials.",

@@ -26,6 +26,7 @@ import {
   resolveDaemonStatusTimeoutMs,
   resolvePackagedChildBaseEnv,
   resolvePackagedPathEnv,
+  stalePackagedRuntimeSidecarPids,
   waitForStatus,
 } from '../src/sidecars.js';
 import type { PackagedNamespacePaths } from '../src/paths.js';
@@ -121,6 +122,72 @@ describe('packaged child Vite+ environment forwarding', () => {
       else process.env.VP_HOME = originalVpHome;
       rmSync(vpHome, { recursive: true, force: true });
     }
+  });
+});
+
+describe('stalePackagedRuntimeSidecarPids', () => {
+  it('selects same-namespace packaged daemon/web runtime sidecars only', () => {
+    const runtime = {
+      app: 'desktop',
+      base: '/tmp/open-design/runtime/default',
+      ipc: '/tmp/open-design/ipc/default/desktop.sock',
+      mode: 'runtime',
+      namespace: 'default',
+      source: 'packaged',
+    } as const;
+
+    const matches = stalePackagedRuntimeSidecarPids(
+      [
+        {
+          pid: 111,
+          ppid: 1,
+          command:
+            '/Volumes/Open Design/Open Design.app/Contents/MacOS/Open Design ' +
+            '/Volumes/Open Design/Open Design.app/Contents/Resources/app/prebundled/daemon/daemon-sidecar.mjs ' +
+            '--od-stamp-app=daemon --od-stamp-mode=runtime --od-stamp-namespace=default ' +
+            '--od-stamp-ipc=/tmp/open-design/ipc/default/daemon.sock --od-stamp-source=packaged',
+        },
+        {
+          pid: 222,
+          ppid: 1,
+          command:
+            '/Volumes/Open Design/Open Design.app/Contents/MacOS/Open Design ' +
+            '/Volumes/Open Design/Open Design.app/Contents/Resources/app/prebundled/web-sidecar.mjs ' +
+            '--od-stamp-app=web --od-stamp-mode=runtime --od-stamp-namespace=default ' +
+            '--od-stamp-ipc=/tmp/open-design/ipc/default/web.sock --od-stamp-source=packaged',
+        },
+        {
+          pid: 333,
+          ppid: 1,
+          command:
+            '/Applications/Open Design.app/Contents/MacOS/Open Design ' +
+            '/Applications/Open Design.app/Contents/Resources/app/prebundled/daemon/daemon-sidecar.mjs ' +
+            '--od-stamp-app=daemon --od-stamp-mode=runtime --od-stamp-namespace=preview ' +
+            '--od-stamp-ipc=/tmp/open-design/ipc/preview/daemon.sock --od-stamp-source=packaged',
+        },
+        {
+          pid: 444,
+          ppid: 1,
+          command:
+            '/Applications/Open Design.app/Contents/MacOS/Open Design ' +
+            '/Applications/Open Design.app/Contents/Resources/app/prebundled/desktop/desktop-sidecar.mjs ' +
+            '--od-stamp-app=desktop --od-stamp-mode=runtime --od-stamp-namespace=default ' +
+            '--od-stamp-ipc=/tmp/open-design/ipc/default/desktop.sock --od-stamp-source=packaged',
+        },
+        {
+          pid: 555,
+          ppid: 1,
+          command:
+            '/Applications/Open Design.app/Contents/MacOS/Open Design ' +
+            '/Applications/Open Design.app/Contents/Resources/app/prebundled/web-sidecar.mjs ' +
+            '--od-stamp-app=web --od-stamp-mode=dev --od-stamp-namespace=default ' +
+            '--od-stamp-ipc=/tmp/open-design/ipc/default/web.sock --od-stamp-source=tools-dev',
+        },
+      ],
+      runtime,
+    );
+
+    expect(matches).toEqual([111, 222]);
   });
 });
 

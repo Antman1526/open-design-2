@@ -23,6 +23,9 @@ import {
 } from "@open-design/sidecar";
 import {
   createProcessStampArgs,
+  listProcessSnapshots,
+  matchesStampedProcess,
+  type ProcessSnapshot,
   stopProcesses,
   waitForProcessExit,
   wellKnownUserToolchainBins,
@@ -221,6 +224,37 @@ export function resolvePackagedChildBaseEnv(
   return baseEnv;
 }
 
+export function stalePackagedRuntimeSidecarPids(
+  processes: ProcessSnapshot[],
+  runtime: SidecarRuntimeContext<SidecarStamp>,
+): number[] {
+  return processes
+    .filter((processInfo) => processInfo.pid !== process.pid)
+    .filter((processInfo) =>
+      [APP_KEYS.DAEMON, APP_KEYS.WEB].some((app) =>
+        matchesStampedProcess(
+          processInfo,
+          {
+            app,
+            mode: SIDECAR_MODES.RUNTIME,
+            namespace: runtime.namespace,
+            source: runtime.source,
+          },
+          OPEN_DESIGN_SIDECAR_CONTRACT,
+        ),
+      ),
+    )
+    .map((processInfo) => processInfo.pid);
+}
+
+async function stopStalePackagedRuntimeSidecars(
+  runtime: SidecarRuntimeContext<SidecarStamp>,
+): Promise<void> {
+  const stalePids = stalePackagedRuntimeSidecarPids(await listProcessSnapshots(), runtime);
+  if (stalePids.length === 0) return;
+  await stopProcesses(stalePids);
+}
+
 function createPackagedDaemonManagedPathEnv(
   paths: PackagedNamespacePaths,
 ): PackagedDaemonManagedPathEnv {
@@ -405,6 +439,7 @@ export async function startPackagedSidecars(
   await mkdir(paths.updateRoot, { recursive: true });
   await mkdir(paths.electronUserDataRoot, { recursive: true });
   await mkdir(paths.electronSessionDataRoot, { recursive: true });
+  await stopStalePackagedRuntimeSidecars(runtime);
 
   const children: ManagedSidecarChild[] = [];
 
